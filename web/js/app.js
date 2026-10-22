@@ -851,6 +851,7 @@ const App = {
     if (wrap) {
       wrap.innerHTML = '<div class="duplicate-table__empty">Запустите поиск, чтобы увидеть дубликаты Tag</div>';
     }
+    this.syncDuplicateExportButton();
   },
 
   async restoreDuplicateScanSnapshot() {
@@ -998,7 +999,7 @@ const App = {
       const mode = String(item.mode || '').trim();
       const value = String(item.value ?? '').trim();
       if (!value) continue;
-      if (mode === 'contains_char') {
+      if (this.duplicateTagPatternNeedsSingleChar(mode)) {
         if ([...value].length !== 1) continue;
       } else if (mode === 'contains_text') {
       } else {
@@ -1007,6 +1008,10 @@ const App = {
       patterns.push({ mode, value });
     }
     return patterns;
+  },
+
+  duplicateTagPatternNeedsSingleChar(mode) {
+    return mode === 'contains_char' || mode === 'exact_one_char' || mode === 'first_char';
   },
 
   buildDuplicateExcludedScopesFromFields(fields) {
@@ -1025,7 +1030,7 @@ const App = {
       const mode = String(row._fields?.modeSel?.value || '').trim();
       const value = String(row._fields?.valueInput?.value || '').trim();
       if (!value) continue;
-      if (mode === 'contains_char') {
+      if (this.duplicateTagPatternNeedsSingleChar(mode)) {
         if ([...value].length !== 1) continue;
       } else if (mode === 'contains_text') {
       } else {
@@ -1061,6 +1066,8 @@ const App = {
     for (const [val, label] of [
       ['contains_char', 'Содержит символ'],
       ['contains_text', 'Содержит текст'],
+      ['exact_one_char', 'Содержит один символ'],
+      ['first_char', 'Первый символ'],
     ]) {
       const opt = document.createElement('option');
       opt.value = val;
@@ -1088,7 +1095,7 @@ const App = {
     const valueLabel = valueWrap.querySelector('.props-field__label');
 
     const syncValueFieldUI = () => {
-      const isChar = modeSel.value === 'contains_char';
+      const isChar = this.duplicateTagPatternNeedsSingleChar(modeSel.value);
       if (valueLabel) valueLabel.textContent = isChar ? 'Символ' : 'Текст';
       if (isChar) {
         valueInput.maxLength = 1;
@@ -2658,7 +2665,7 @@ const App = {
     tagExclusions.appendChild(tagExclusionsTitle);
     const tagExclusionsHint = document.createElement('div');
     tagExclusionsHint.className = 'duplicate-settings__exclusions-hint';
-    tagExclusionsHint.textContent = 'Tag, содержащие указанный символ или текст, не участвуют в поиске дубликатов';
+    tagExclusionsHint.textContent = 'Tag по выбранному типу не участвуют в поиске дубликатов. Несколько условий — через ИЛИ.';
     tagExclusions.appendChild(tagExclusionsHint);
     const tagExclusionsList = document.createElement('div');
     tagExclusionsList.className = 'duplicate-tag-exclusions-list';
@@ -2722,6 +2729,7 @@ const App = {
     tableWrap.className = 'duplicate-table-wrap';
     tableWrap.id = 'duplicateTableWrap';
     body.appendChild(tableWrap);
+    body.appendChild(this.buildDuplicateExportSection());
     this.renderDuplicateTable(tableWrap);
 
     bgCheck.addEventListener('change', () => this.onDuplicateBackgroundToggle(bgCheck.checked));
@@ -2949,6 +2957,7 @@ const App = {
     const rows = this.duplicateRows || [];
     if (rows.length === 0) {
       wrap.innerHTML = '<div class="duplicate-table__empty">Запустите поиск, чтобы увидеть дубликаты Tag</div>';
+      this.syncDuplicateExportButton();
       return;
     }
     const defs = this.duplicateTableColumnDefs();
@@ -3032,6 +3041,153 @@ const App = {
     wrap.innerHTML = '';
     wrap.appendChild(table);
     this.setupDuplicateTableColumns(table, layout);
+    this.syncDuplicateExportButton();
+  },
+
+  buildDuplicateExportSection() {
+    const section = document.createElement('div');
+    section.className = 'duplicate-export';
+    section.id = 'duplicateExportSection';
+
+    const title = document.createElement('div');
+    title.className = 'props-field__label';
+    title.textContent = 'Выгрузка дубликатов Tag';
+    section.appendChild(title);
+
+    const hint = document.createElement('div');
+    hint.className = 'duplicate-settings__exclusions-hint';
+    hint.textContent = 'В отчёт попадают все строки текущей таблицы. Отметьте колонки и нажмите «Выгрузить».';
+    section.appendChild(hint);
+
+    const formatSel = document.createElement('select');
+    formatSel.className = 'input duplicate-export__format';
+    formatSel.id = 'duplicateExportFormat';
+    [['csv', 'CSV'], ['txt', 'TXT'], ['xml', 'XML']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = l;
+      formatSel.appendChild(opt);
+    });
+    section.appendChild(this.labeledBlock('Формат', formatSel));
+
+    const checks = document.createElement('div');
+    checks.className = 'duplicate-export__columns display-settings__checks';
+    checks.id = 'duplicateExportColumns';
+    for (const def of this.duplicateTableColumnDefs()) {
+      const wrap = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = def.key;
+      cb.checked = true;
+      wrap.appendChild(cb);
+      wrap.appendChild(document.createTextNode(def.label));
+      checks.appendChild(wrap);
+    }
+    section.appendChild(this.labeledBlock('Колонки отчёта', checks));
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'duplicate-export__actions';
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'btn btn--primary';
+    exportBtn.id = 'duplicateExportBtn';
+    exportBtn.textContent = 'Выгрузить';
+    exportBtn.addEventListener('click', () => this.exportDuplicateRows());
+    btnRow.appendChild(exportBtn);
+    section.appendChild(btnRow);
+    return section;
+  },
+
+  selectedDuplicateExportColumns() {
+    const checks = document.getElementById('duplicateExportColumns');
+    if (!checks) return [];
+    const selected = [];
+    for (const cb of checks.querySelectorAll('input[type="checkbox"]')) {
+      if (cb.checked) selected.push(cb.value);
+    }
+    return selected;
+  },
+
+  syncDuplicateExportButton() {
+    const btn = document.getElementById('duplicateExportBtn');
+    if (!btn) return;
+    const hasRows = (this.duplicateRows || []).length > 0;
+    btn.disabled = !hasRows;
+  },
+
+  csvEscapeDuplicateCell(value) {
+    const text = String(value ?? '');
+    if (/[;"\n\r]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  },
+
+  xmlEscapeDuplicateCell(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  },
+
+  txtEscapeDuplicateCell(value) {
+    return String(value ?? '').replace(/[\t\r\n]+/g, ' ');
+  },
+
+  buildDuplicateExportText(format, columnKeys, rows) {
+    const defs = this.duplicateTableColumnDefs();
+    const defMap = Object.fromEntries(defs.map(d => [d.key, d]));
+    const headers = columnKeys.map(key => defMap[key]?.label || key);
+    if (format === 'csv') {
+      const lines = [headers.map(h => this.csvEscapeDuplicateCell(h)).join(';')];
+      for (const row of rows) {
+        lines.push(columnKeys.map(key => this.csvEscapeDuplicateCell(this.duplicateCellValue(row, key))).join(';'));
+      }
+      return lines.join('\r\n');
+    }
+    if (format === 'txt') {
+      const lines = [headers.map(h => this.txtEscapeDuplicateCell(h)).join('\t')];
+      for (const row of rows) {
+        lines.push(columnKeys.map(key => this.txtEscapeDuplicateCell(this.duplicateCellValue(row, key))).join('\t'));
+      }
+      return lines.join('\r\n');
+    }
+    const parts = ['<?xml version="1.0" encoding="UTF-8"?>', '<duplicates>'];
+    for (const row of rows) {
+      parts.push('  <row>');
+      for (const key of columnKeys) {
+        const tag = key.replace(/[^A-Za-z0-9_]/g, '_');
+        parts.push(`    <${tag}>${this.xmlEscapeDuplicateCell(this.duplicateCellValue(row, key))}</${tag}>`);
+      }
+      parts.push('  </row>');
+    }
+    parts.push('</duplicates>');
+    return parts.join('\n');
+  },
+
+  exportDuplicateRows() {
+    const rows = this.duplicateRows || [];
+    if (!rows.length) {
+      alert('Сначала выполните поиск дубликатов Tag');
+      return;
+    }
+    const columns = this.selectedDuplicateExportColumns();
+    if (!columns.length) {
+      alert('Выберите хотя бы одну колонку');
+      return;
+    }
+    const format = document.getElementById('duplicateExportFormat')?.value || 'csv';
+    const text = this.buildDuplicateExportText(format, columns, rows);
+    const mime = format === 'xml' ? 'application/xml;charset=utf-8' : 'text/plain;charset=utf-8';
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tag-duplicates.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 
   setupDuplicateTableColumns(table, layout) {
@@ -4388,7 +4544,7 @@ const App = {
           <li><strong>⚠ Проверки</strong> — порядок полей: Тип объекта → Область → Параметр → Атрибут параметра → Условие текста → Текст → Пустое поле → Индикация → Цвет → Период. Область задаёт список Параметра (Основные, Характеристики, Команды, Защиты); при нарушении объект подсвечивается на схеме. Условие текста: «Должен / Не должен содержать» — по вхождению; «Строгое соответствие» — значение должно быть равно тексту; «Не должен совпадать строго» — нарушение, если значение ровно равно тексту (подсветка объекта). Списки параметров берутся из каталога решения и на повторных открытиях загружаются быстро. Если список не загрузился, нажмите <strong>⟳ Повторить</strong> рядом с полем «Параметр». Надпись «Нет вариантов» означает, что для выбранного типа объекта и области список пуст.</li>
           <li><strong>🏷 Редактирование TAG</strong> — правила массового изменения Tag: условие (содержит / начинается / заканчивается), действие (очистить или заменить). «Применить» — подтверждение, затем сразу оверлей «Редактирование TAG…» с ходом обработки. Если были изменения, появляется «● Несохранено»; искать дубликаты можно сразу, без «Сохранить». Save нужен, чтобы записать правки в базу. На больших решениях дождитесь окончания оверлея. TAG edit и поиск дубликатов (обычный/фоновый) взаимно блокируются.</li>
           <li><strong>Выгрузить объекты</strong> — таблица CSV/JSON по выбранным полям; можно выгрузить только изменённые объекты и настроить порядок колонок. В параметрах можно включить колонку <strong>Template</strong> (тип объекта); select «Тип объекта» сверху — фильтр строк, его можно сочетать с «только изменённые» (AND). В строке Tag (или отдельно, если Tag снят) — фильтр: Все / Только непустые / Только пустые (по умолчанию — только непустые). Рядом с «Только изменённые объекты» — кнопка <strong>Обнуление данных по изменённым объектам</strong>: скрывает учтённые изменения из счётчика и фильтра «только изменённые», не удаляя правки в решении. Сохранение решения список и счётчик не сбрасывает — сброс только этой кнопкой.</li>
-          <li><strong>Дубликаты</strong> — поиск одинаковых Tag по основным параметрам, характеристикам, командам и защитам. В таблице, на вкладке «Дубликаты» инспектора и в плавающей панели колонка Id — технологический Id объекта (как во вкладке «Основные»); если пусто — «—»; навигация по строке использует системный ключ графического объекта. В настройках: области поиска (Основные / Характеристики / Команды / Защиты — отмеченные участвуют в поиске) и исключения Tag по содержимому — «Содержит символ» или «Содержит текст» (несколько условий через ИЛИ; помеченные Tag не участвуют в поиске). «Начать поиск» — полный принудительный проход с оверлеем; на больших решениях может занять заметное время — дождитесь окончания по оверлею. «Поиск в фоне» — щадящий фоновый сканер без оверлея: сначала весь проект, затем только изменения; найденные дубликаты появляются в таблице по мере сканирования. Обычный и фоновый поиск взаимно блокируются. Смена областей поиска и исключений Tag сохраняется при запуске поиска или включении фона и требует полного пересчёта. Результаты поиска сохраняются и после обновления страницы снова видны на схемах и в обозревателе; полный пересчёт — только повторным запуском поиска (или фоном, если включён).</li>
+          <li><strong>Дубликаты</strong> — поиск одинаковых Tag по основным параметрам, характеристикам, командам и защитам. В таблице, на вкладке «Дубликаты» инспектора и в плавающей панели колонка Id — технологический Id объекта (как во вкладке «Основные»); если пусто — «—»; навигация по строке использует системный ключ графического объекта. В настройках: области поиска (Основные / Характеристики / Команды / Защиты — отмеченные участвуют в поиске) и исключения Tag (несколько условий через ИЛИ; подходящие Tag не участвуют в поиске). Типы исключения: «Содержит символ» — символ встречается в Tag; «Содержит текст» — фрагмент встречается в Tag; «Содержит один символ» — Tag целиком равен одному заданному символу (например «.» исключает только Tag «.», а не «тест.это.тест»); «Первый символ» — первый символ Tag равен заданному. «Начать поиск» — полный принудительный проход с оверлеем; на больших решениях может занять заметное время — дождитесь окончания по оверлею. «Поиск в фоне» — щадящий фоновый сканер без оверлея: сначала весь проект, затем только изменения; найденные дубликаты появляются в таблице по мере сканирования. Обычный и фоновый поиск взаимно блокируются. Смена областей поиска и исключений Tag сохраняется при запуске поиска или включении фона и требует полного пересчёта. После поиска блок «Выгрузка дубликатов Tag»: формат CSV (разделитель «;» и строка заголовка), TXT (колонки через табуляцию) или XML (корень duplicates, строки row, выбранные колонки — теги); отметьте колонки отчёта (Tag, Id, Имя, Тип, Область, Параметр, Схема; по умолчанию все включены) и нажмите <strong>Выгрузить</strong> — скачивается файл UTF-8 со всеми строками текущей таблицы. Без результатов поиска кнопка недоступна. Результаты поиска сохраняются и после обновления страницы снова видны на схемах и в обозревателе; полный пересчёт — только повторным запуском поиска (или фоном, если включён).</li>
           <li><strong>Сохранить</strong> — записать правки из буфера сессии в решение. Открытая схема после успеха остаётся открытой (перечитывается с сервера). Во время сохранения интерфейс блокируется оверлеем с процентом и оценкой оставшегося времени; успех показывается на оверлее без отдельного окна, при ошибке правки остаются несохранёнными.</li>
           <li><strong>Выгрузить XML</strong> — полный Solution.xml с учётом несохранённых рабочих изменений.</li>
         </ul>

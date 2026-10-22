@@ -1155,6 +1155,26 @@ body {
   align-self: center;
   color: var(--state-alarm);
 }
+.duplicate-export {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.duplicate-export__format {
+  max-width: 160px;
+}
+.duplicate-export__columns {
+  margin-bottom: 0;
+}
+.duplicate-export__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .props-tab--alarm {
   color: var(--state-alarm);
 }

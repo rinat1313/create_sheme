@@ -293,6 +293,10 @@ func TestParseDuplicateExcludedTagPatterns_FromIndication(t *testing.T) {
 			{"mode": "contains_char", "value": " "},
 			{"mode": "contains_text", "value": "   "},
 			{"mode": "equals", "value": "X"},
+			{"mode": "exact_one_char", "value": "."},
+			{"mode": "first_char", "value": "A"},
+			{"mode": "exact_one_char", "value": ".."},
+			{"mode": "first_char", "value": ""},
 			{"mode": "contains_char", "value": ""},
 		},
 	})
@@ -301,14 +305,20 @@ func TestParseDuplicateExcludedTagPatterns_FromIndication(t *testing.T) {
 	}
 	rule := repository.ComplianceRule{Indication: indication}
 	patterns := parseDuplicateExcludedTagPatterns(rule)
-	if len(patterns) != 2 {
-		t.Fatalf("expected 2 valid patterns, got %v", patterns)
+	if len(patterns) != 4 {
+		t.Fatalf("expected 4 valid patterns, got %v", patterns)
 	}
 	if patterns[0].Mode != "contains_char" || patterns[0].Value != "_" {
 		t.Fatalf("unexpected first pattern: %+v", patterns[0])
 	}
 	if patterns[1].Mode != "contains_text" || patterns[1].Value != "TMP" {
 		t.Fatalf("unexpected second pattern: %+v", patterns[1])
+	}
+	if patterns[2].Mode != "exact_one_char" || patterns[2].Value != "." {
+		t.Fatalf("unexpected third pattern: %+v", patterns[2])
+	}
+	if patterns[3].Mode != "first_char" || patterns[3].Value != "A" {
+		t.Fatalf("unexpected fourth pattern: %+v", patterns[3])
 	}
 }
 
@@ -400,6 +410,92 @@ func TestCollectTagOccurrences_ScopesAndTagPatternsIndependent(t *testing.T) {
 	}
 	if !tags["PROP"] {
 		t.Fatalf("property PROP should remain, got %v", tags)
+	}
+}
+
+func TestTagExcludedByPatterns_ExactOneCharAndFirstChar(t *testing.T) {
+	exact := []duplicateTagPattern{{Mode: "exact_one_char", Value: "."}}
+	if !tagExcludedByPatterns(".", exact) {
+		t.Fatal("exact_one_char should exclude tag '.'")
+	}
+	if tagExcludedByPatterns("тест.это.тест", exact) {
+		t.Fatal("exact_one_char should not exclude longer tag with dots")
+	}
+	if tagExcludedByPatterns("a.", exact) {
+		t.Fatal("exact_one_char should not exclude two-character tag")
+	}
+
+	first := []duplicateTagPattern{{Mode: "first_char", Value: "."}}
+	if !tagExcludedByPatterns(".abc", first) {
+		t.Fatal("first_char should exclude tag starting with '.'")
+	}
+	if !tagExcludedByPatterns(".", first) {
+		t.Fatal("first_char should exclude single '.'")
+	}
+	if tagExcludedByPatterns("тест.это.тест", first) {
+		t.Fatal("first_char should not exclude tag that does not start with '.'")
+	}
+	if tagExcludedByPatterns("", first) {
+		t.Fatal("empty tag is never excluded")
+	}
+}
+
+func TestCollectTagOccurrences_ExcludesTagByExactOneChar(t *testing.T) {
+	obj1 := domain.GraphicObject{Id: "obj-1", TechnologyObject: []domain.TechnologyObject{{Id: "to-1", Tag: "."}}}
+	obj2 := domain.GraphicObject{Id: "obj-2", TechnologyObject: []domain.TechnologyObject{{Id: "to-2", Tag: "."}}}
+	obj3 := domain.GraphicObject{Id: "obj-3", TechnologyObject: []domain.TechnologyObject{{Id: "to-3", Tag: "тест.это.тест"}}}
+	obj4 := domain.GraphicObject{Id: "obj-4", TechnologyObject: []domain.TechnologyObject{{Id: "to-4", Tag: "тест.это.тест"}}}
+	sol := makeDuplicateScanSolution([]domain.GraphicObject{obj1, obj2, obj3, obj4}, nil, nil)
+
+	patterns := []duplicateTagPattern{{Mode: "exact_one_char", Value: "."}}
+	var all []TagOccurrence
+	for _, project := range sol.Projects.Project {
+		for _, scheme := range project.GraphicScheme {
+			for _, obj := range scheme.GraphicObject {
+				all = append(all, collectTagOccurrencesForObject(sol, scheme.Id, scheme.Name, obj, nil, patterns)...)
+			}
+		}
+	}
+	for _, occ := range all {
+		if occ.Tag == "." {
+			t.Fatalf("single-char tag should be excluded, got %+v", occ)
+		}
+	}
+	violations, duplicateTags := BuildDuplicateTagIndex(all)
+	if len(duplicateTags) != 1 || duplicateTags[0] != "тест.это.тест" {
+		t.Fatalf("expected only dotted text duplicate, got %v", duplicateTags)
+	}
+	if !violations["obj-3"] || !violations["obj-4"] {
+		t.Fatalf("expected dotted text violations, got %v", violations)
+	}
+	if violations["obj-1"] || violations["obj-2"] {
+		t.Fatalf("exact '.' tags should not create violations, got %v", violations)
+	}
+}
+
+func TestCollectTagOccurrences_ExcludesTagByFirstChar(t *testing.T) {
+	obj := domain.GraphicObject{
+		Id: "obj-1",
+		TechnologyObject: []domain.TechnologyObject{{
+			Id: "to-1", Tag: ".MAIN",
+			TechnologyProperty: []domain.TechnologyProperty{
+				{Name: "P1", Tag: "KEEP"},
+				{Name: "P2", Tag: ".PROP"},
+			},
+		}},
+	}
+	sol := makeDuplicateScanSolution([]domain.GraphicObject{obj}, nil, nil)
+	patterns := []duplicateTagPattern{{Mode: "first_char", Value: "."}}
+	occurrences := collectTagOccurrencesForObject(sol, "scheme-1", "Scheme 1", obj, nil, patterns)
+	tags := map[string]bool{}
+	for _, occ := range occurrences {
+		tags[occ.Tag] = true
+	}
+	if tags[".MAIN"] || tags[".PROP"] {
+		t.Fatalf("tags starting with '.' should be excluded, got %v", tags)
+	}
+	if !tags["KEEP"] {
+		t.Fatalf("expected KEEP, got %v", tags)
 	}
 }
 

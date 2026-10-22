@@ -211,7 +211,7 @@ func parseDuplicateExcludedTagPatterns(rule repository.ComplianceRule) []duplica
 			continue
 		}
 		switch mode {
-		case "contains_char":
+		case "contains_char", "exact_one_char", "first_char":
 			if utf8.RuneCountInString(value) != 1 {
 				continue
 			}
@@ -242,6 +242,16 @@ func tagExcludedByPatterns(tag string, patterns []duplicateTagPattern) bool {
 		switch p.Mode {
 		case "contains_char", "contains_text":
 			if strings.Contains(tag, p.Value) {
+				return true
+			}
+		case "exact_one_char":
+			if utf8.RuneCountInString(tag) == 1 && tag == p.Value {
+				return true
+			}
+		case "first_char":
+			tr, _ := utf8.DecodeRuneInString(tag)
+			vr, _ := utf8.DecodeRuneInString(p.Value)
+			if tr != utf8.RuneError && tr == vr {
 				return true
 			}
 		}
