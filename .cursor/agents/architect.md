@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Архитектор системы. Вызывай через Task на этапах 2–4. Слои API, данные, границы сервисов. Не спрашивает пользователя.
-model: inherit
+model: grok-4.7-high
 readonly: true
 ---
 

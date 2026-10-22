@@ -1,7 +1,7 @@
 ---
 name: algorithmist
 description: Алгоритмист. Вызывай через Task на этапах 2–4 при расчётах, графах, вероятностях. Не спрашивает пользователя.
-model: inherit
+model: grok-4.7-high
 readonly: true
 ---
 
