@@ -1,6 +1,8 @@
 # Каталог skills, rules и subagents
 
-Снимок на момент коммита пакета. Подробности — в файлах папок `skills/`, `rules/`, `agents/`.
+Снимок на момент коммита пакета. Как внедрять в другой проект и как агент должен себя вести — **`FOR-NEW-AGENT.md`**.
+
+Подробности файлов — в папках `skills/`, `rules/`, `agents/`.
 
 ## Skills
 
@@ -48,3 +50,5 @@
 **Тестировщики:** `qa-tester`, `manual-tester`, `sql-tester`.
 
 **Технические писатели:** `technical-writer`.
+
+Модели (поле `model` в файле агента): `lead` — grok-4.6-fast; `architect` / `security` / `algorithmist` — grok-4.7-high; `analyst` / `ui-ux-designer` / `programmer` / `database` — grok-4.6-medium; исполнители, `qa-tester`, `sql-tester`, `technical-writer` — composer-2.5; `manual-tester` — inherit.

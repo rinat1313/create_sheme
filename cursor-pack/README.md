@@ -1,22 +1,26 @@
 # Пакет Cursor для переноса в другой проект
 
-Снимок важных файлов Cursor из `create_sheme`: skills, rules, subagents.
+Снимок skills, rules и subagents из `create_sheme` (`origin/main`).
 
-| Папка | Откуда | Куда класть в новом проекте |
-|-------|--------|-----------------------------|
-| `skills/` | `.cursor/skills/` | `.cursor/skills/` |
-| `rules/` | `.cursor/rules/` | `.cursor/rules/` |
-| `agents/` | `.cursor/agents/` | `.cursor/agents/` |
+**Главный файл для нового агента:** [`FOR-NEW-AGENT.md`](FOR-NEW-AGENT.md)  
+Развёрнутая инструкция: как скопировать пакет, когда запускать ТЗ, 8 этапов, кого вызывать, модели, git, текст первого сообщения.
 
-- `user-chat-history.md` — исходные формулировки из чата по этому проекту (что писал пользователь).
-- `catalog.md` — кратко, что делает каждый skill, rule и subagent.
+| Папка / файл | Куда |
+|--------------|------|
+| `skills/` | `.cursor/skills/` |
+| `rules/` | `.cursor/rules/` |
+| `agents/` | `.cursor/agents/` |
+| `FOR-NEW-AGENT.md` | оставь в `cursor-pack/` или положи в корень нового репо и дай агенту в чат |
+| `catalog.md` | краткий перечень |
+| `user-chat-history.md` | исходные формулировки человека из треда (архив, не конфиг Cursor) |
 
 ## Как добавить в другой проект
 
-Из корня **нового** репозитория:
-
 ```bash
-mkdir -p .cursor && cp -a путь/к/create_sheme/cursor-pack/skills .cursor/skills && cp -a путь/к/create_sheme/cursor-pack/rules .cursor/rules && cp -a путь/к/create_sheme/cursor-pack/agents .cursor/agents
+mkdir -p .cursor
+cp -a cursor-pack/skills .cursor/skills
+cp -a cursor-pack/rules .cursor/rules
+cp -a cursor-pack/agents .cursor/agents
 ```
 
-После копирования коммит в `main` нового проекта (правила пакета сами требуют актуальный `.cursor/` в `origin/main`).
+После копирования закоммить в `main` нового проекта. Правило `inspector-editing.mdc` можно не брать, если нет инспектора схем.
