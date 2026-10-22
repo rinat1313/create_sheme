@@ -50,6 +50,6 @@ alwaysApply: true
 
 ## Рабочий процесс по ТЗ
 
-**ВСЕГДА** следуй skill `tz-workflow` (`.cursor/skills/tz-workflow/SKILL.md`) и делегируй задачи subagent'ам из `.cursor/agents/`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`) до архитектора и дизайнера. На этапе 2 читай skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`): он дополняет workflow и не заменяет цепочку ролей. После изменений функционала читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`) и вызывай `технический писатель`.
+**ВСЕГДА** следуй skill `tz-workflow` (`.cursor/skills/tz-workflow/SKILL.md`) и делегируй задачи subagent'ам из `.cursor/agents/`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`) до архитектора и дизайнера. На этапе 2 читай skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 читай skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`): он дополняет workflow и не заменяет цепочку ролей. После изменений функционала читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`) и вызывай `технический писатель`.
 
 При получении ТЗ обязательны 8 этапов: получение ТЗ → подготовка вопросов → подготовка решений → подготовка задач → выполнение задач → проверка → подготовка документации → подготовка отчетов. Задача не завершена без прохождения всей цепочки.
