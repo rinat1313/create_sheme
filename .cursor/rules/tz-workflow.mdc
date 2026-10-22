@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Рабочий процесс по ТЗ
 
-При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`) до архитектора и дизайнера. На этапе 2 специалисты и lead читают skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 — skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). На этапе 4 — skill `tz-tasks` (`.cursor/skills/tz-tasks/SKILL.md`). Они дополняют `tz-workflow` и не меняют обязательную цепочку. При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах дизайнер, worker и тестировщик UI интерфейса. После изменений функционала читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`) и вызывай технического писателя для руководства и help.
+При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`) до архитектора и дизайнера. На этапе 2 специалисты и lead читают skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 — skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). На этапе 4 — skill `tz-tasks` (`.cursor/skills/tz-tasks/SKILL.md`). На этапе 5 — skill `tz-execute` (`.cursor/skills/tz-execute/SKILL.md`). Они дополняют `tz-workflow` и не меняют обязательную цепочку. При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах дизайнер, worker и тестировщик UI интерфейса. После изменений функционала читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`) и вызывай технического писателя для руководства и help.
 
 ## Обязательность специалистов
 
@@ -15,7 +15,7 @@ alwaysApply: true
 2. Подготовка вопросов — **архитектор** и **дизайнер** по skill `tz-questions` (кратко, если scope узкий); противоречия сводит lead; вопросы пользователю задаёт только lead.
 3. Подготовка решений — **архитектор** и **дизайнер** по skill `tz-solutions`; lead проверяет противоречия дважды и готовит пакет для пула задач.
 4. Подготовка задач — **lead** и **архитектор** по skill `tz-tasks` (черновик по зонам, анализ исполнителями, внутренние вопросы, гейт решений, финальный пул).
-5. Выполнение задач — **worker**.
+5. Выполнение задач — **worker** по skill `tz-execute` (своя зона, локальная проверка своей задачи, отчёт lead; при проблемах — доработка или возврат на этап 3).
 6. Проверка выполненной работы — **тестировщик**; при UI — **тестировщик UI интерфейса**.
 7. Подготовка документации — **технический писатель** при пользовательских изменениях, иначе N/A.
 8. Подготовка отчетов — **lead** формирует отчёт и закрывает ТЗ.
