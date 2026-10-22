@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solution Viewer — SCADA</title>
+  <link rel="stylesheet" href="/css/app.css?v=20260907v">
+</head>
+<body>
+  <div id="app" class="app app--empty">
+    <div class="upload-overlay" id="uploadOverlay" hidden>
+      <div class="upload-overlay__card">
+        <div class="upload-overlay__title" id="uploadOverlayTitle">Загрузка файла…</div>
+        <div class="upload-overlay__file" id="uploadOverlayFile"></div>
+        <div class="upload-overlay__progress">
+          <div class="upload-overlay__bar" id="uploadOverlayBar"></div>
+        </div>
+        <div class="upload-overlay__status" id="uploadOverlayStatus"></div>
+      </div>
+    </div>
+    <div class="upload-overlay" id="saveOverlay" hidden>
+      <div class="upload-overlay__card">
+        <div class="upload-overlay__title" id="saveOverlayTitle">Сохранение решения…</div>
+        <div class="upload-overlay__file" id="saveOverlayFile"></div>
+        <div class="upload-overlay__progress">
+          <div class="upload-overlay__bar" id="saveOverlayBar"></div>
+        </div>
+        <div class="upload-overlay__status" id="saveOverlayStatus"></div>
+        <button type="button" id="saveOverlayClose" class="btn btn--primary" hidden style="margin-top:12px;width:100%">Закрыть</button>
+      </div>
+    </div>
+    <div class="upload-overlay" id="duplicateScanOverlay" hidden>
+      <div class="upload-overlay__card">
+        <div class="upload-overlay__title" id="duplicateScanTitle">Поиск дубликатов…</div>
+        <div class="upload-overlay__file" id="duplicateScanDetail"></div>
+        <div class="upload-overlay__progress">
+          <div class="upload-overlay__bar" id="duplicateScanBar"></div>
+        </div>
+        <div class="upload-overlay__status" id="duplicateScanStatus"></div>
+      </div>
+    </div>
+    <div class="upload-overlay" id="userGateOverlay" hidden>
+      <div class="upload-overlay__card">
+        <div class="upload-overlay__title">Создать пользователя</div>
+        <input id="userGateLogin" class="input" type="text" placeholder="Логин" style="width:100%;margin:12px 0 8px">
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button type="button" id="userGateCancel" class="btn btn--ghost" style="flex:1">Отмена</button>
+          <button type="button" id="userGateContinue" class="btn btn--primary" style="flex:1">Создать</button>
+        </div>
+      </div>
+    </div>
+    <header class="topbar">
+      <div class="topbar__left">
+        <div class="topbar__user">
+          <button type="button" id="btnUserMenu" class="btn btn--ghost topbar__user-btn topbar__user-btn--needs-user" title="Выбрать…" aria-haspopup="true" aria-expanded="false">👤 Выбрать…</button>
+          <div class="topbar__user-menu" id="userMenu" hidden>
+            <div class="topbar__user-menu-list" id="userMenuList"></div>
+            <button type="button" class="topbar__user-menu-create" id="btnCreateUser">+ Создать нового</button>
+          </div>
+        </div>
+        <span class="topbar__divider" aria-hidden="true"></span>
+        <label class="btn btn--primary btn--icon" id="addSolutionLabel" title="Добавить решение (Solution.xml или .rar)">
+          <input type="file" id="fileInput" accept=".xml,.rar" hidden>
+          +
+        </label>
+        <div class="topbar__solutions">
+          <button type="button" id="btnSolutionMenu" class="btn btn--ghost btn--icon topbar__solutions-btn" hidden title="Выбрать решение" aria-haspopup="true" aria-expanded="false">≡</button>
+          <div class="topbar__solutions-menu" id="solutionMenu" hidden>
+            <div class="topbar__solutions-menu-list" id="solutionMenuList"></div>
+          </div>
+        </div>
+        <span id="solutionName" class="topbar__title"></span>
+        <span id="dirtyBadge" class="badge badge--dirty" hidden>● Несохранено</span>
+        <button type="button" id="btnDeleteSolution" class="btn btn--ghost btn--danger btn--icon" hidden title="Удалить текущее решение">🗑</button>
+      </div>
+      <div class="topbar__right">
+        <button type="button" id="btnDisplaySettings" class="btn btn--ghost" title="Настройки отображения">⚙ Отображение</button>
+        <button type="button" id="btnComplianceSettings" class="btn btn--ghost" title="Проверки">⚠ Проверки</button>
+        <button type="button" id="btnDuplicateSettings" class="btn btn--ghost" disabled title="Поиск дубликатов Tag">Дубликаты</button>
+        <button type="button" id="btnTagEditSettings" class="btn btn--ghost" disabled title="Редактирование TAG">🏷 Редактирование TAG</button>
+        <button type="button" id="btnExportObjects" class="btn btn--ghost" disabled>Выгрузить объекты</button>
+        <button type="button" id="btnSave" class="btn btn--secondary" disabled>Сохранить</button>
+        <button type="button" id="btnExport" class="btn btn--ghost" disabled>Выгрузить XML</button>
+        <button type="button" id="btnClearAll" class="btn btn--ghost btn--danger" title="Удалить все мои решения">Очистить всё</button>
+        <div class="topbar__right-end">
+          <button type="button" id="btnHelp" class="btn btn--ghost btn--icon" title="Справка">?</button>
+          <button type="button" id="btnTheme" class="btn btn--ghost btn--icon" title="Переключить тему">🌙</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <aside class="panel explorer" id="explorer">
+        <div class="panel__header panel__header--explorer">
+          <span class="panel__title">Обозреватель решения</span>
+          <button type="button" id="btnToggleSolutionSearch" class="btn btn--ghost btn--icon" title="Поиск" aria-expanded="false" aria-controls="solutionSearchPanel">⌕</button>
+        </div>
+        <div class="solution-search" id="solutionSearchPanel" hidden>
+          <div class="solution-search__toolbar">
+            <input type="search" id="solutionSearchInput" class="input solution-search__input" placeholder="Имя, Tag, Id…" autocomplete="off" disabled>
+            <button type="button" id="btnClearSolutionSearch" class="btn btn--ghost btn--icon solution-search__clear" title="Очистить" hidden>×</button>
+          </div>
+          <div class="solution-search__status" id="solutionSearchStatus"></div>
+          <div class="solution-search__table-wrap" id="solutionSearchTableWrap" hidden>
+            <table class="duplicate-table solution-search__table">
+              <thead>
+                <tr>
+                  <th><span class="duplicate-table__col-label">Тип</span></th>
+                  <th><span class="duplicate-table__col-label">Название</span></th>
+                  <th><span class="duplicate-table__col-label">Id</span></th>
+                  <th><span class="duplicate-table__col-label">Project</span></th>
+                  <th><span class="duplicate-table__col-label">Схема</span></th>
+                </tr>
+              </thead>
+              <tbody id="solutionSearchBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel__body" id="treeContainer">
+          <p class="props-empty">Сначала выберите или создайте пользователя (кнопка слева вверху)</p>
+        </div>
+        <div class="object-settings-panel" id="objectSettingsPanel" hidden>
+          <div class="object-settings-panel__header">
+            <span class="object-settings-panel__title">Настройки объекта</span>
+            <span class="object-settings-panel__type" id="objectSettingsType"></span>
+          </div>
+          <div class="object-settings-panel__body" id="objectSettingsBody"></div>
+          <div class="object-settings-panel__actions">
+            <button type="button" class="btn btn--primary" id="btnObjectSettingsAccept">Принять</button>
+            <button type="button" class="btn btn--ghost" id="btnObjectSettingsClose">Закрыть</button>
+          </div>
+        </div>
+        <div class="panel__footer" id="treeFooter"></div>
+      </aside>
+
+      <div class="resizer resizer--vertical" id="resizerLeft"></div>
+
+      <main class="canvas" id="canvasArea">
+        <div class="canvas-toolbar" id="canvasToolbar" hidden>
+          <button class="btn btn--icon" id="btnZoomOut">−</button>
+          <span id="zoomLabel">100%</span>
+          <button class="btn btn--icon" id="btnZoomIn">+</button>
+          <button class="btn btn--ghost" id="btnFit">Fit</button>
+          <button class="btn btn--ghost" id="btnLockScheme" title="Блокировка перемещения объектов">🔓 Движение</button>
+          <button class="btn btn--ghost btn-show-duplicate-panel" id="btnShowDuplicatePanel" hidden title="Показать дубликаты на схеме">Дубликаты</button>
+          <button class="btn btn--ghost btn-object-settings" id="btnObjectSettings" title="Настройки объекта">Настройки объекта</button>
+          <button class="btn btn--ghost" id="btnCloseScheme">Закрыть схему</button>
+        </div>
+        <div class="canvas-viewport" id="canvasViewport">
+          <div class="canvas-loading" id="canvasLoading" hidden>Загрузка схемы…</div>
+          <div class="canvas-placeholder" id="canvasPlaceholder">
+            <p>Загрузите Solution.xml или .rar с Solution.xml внутри, либо нажмите «Добавить решение»</p>
+          </div>
+          <svg id="schemeSvg" class="scheme-svg" hidden></svg>
+        </div>
+        <div class="canvas-statusbar" id="canvasStatusbar" hidden>
+          <span id="statusObjects">Объектов: 0</span>
+          <span id="statusZoom">Масштаб: 100%</span>
+          <span id="statusCoords"></span>
+        </div>
+        <div class="duplicate-panel" id="duplicatePanel" hidden>
+          <div class="duplicate-panel__header" id="duplicatePanelHeader">
+            <button class="btn btn--icon duplicate-panel__toggle" id="btnToggleDuplicatePanel" title="Свернуть" aria-expanded="true">▼</button>
+            <span class="duplicate-panel__title">Дубликаты Tag на схеме <span class="duplicate-panel__title-count" id="duplicatePanelCount"></span></span>
+            <button type="button" class="btn btn--icon duplicate-panel__close" id="btnCloseDuplicatePanel" title="Скрыть">✕</button>
+          </div>
+          <div class="duplicate-panel__body" id="duplicatePanelBody"></div>
+        </div>
+      </main>
+
+      <div class="resizer resizer--vertical" id="resizerRight"></div>
+
+      <aside class="panel properties" id="properties">
+        <div class="panel__header props-panel__header">
+          <div class="props-panel__title-row" id="propsTitleRow">
+            <span class="panel__title" id="propsTitle">Свойства</span>
+            <span class="props-duplicate-status" id="propsDuplicateStatus" hidden aria-live="polite"></span>
+            <button type="button" class="btn btn--ghost btn--compact" id="btnRecheckDuplicates" hidden>Проверить на дубликаты</button>
+          </div>
+        </div>
+        <div class="props__tabs" id="propsTabs" hidden>
+          <button class="props-tab props-tab--active" data-tab="props">Основные</button>
+          <button class="props-tab" data-tab="characteristics">Характеристики</button>
+          <button class="props-tab" data-tab="commands">Команды</button>
+          <button class="props-tab" data-tab="protections">Защиты</button>
+          <button class="props-tab props-tab--duplicates" data-tab="duplicates">Дубликаты</button>
+        </div>
+        <div class="panel__body" id="propsBody">
+          <p class="props-empty">Объект не выбран</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="displayModal" class="modal" hidden>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h3>Настройки отображения по типу объекта</h3>
+        <button class="btn btn--icon" id="btnCloseModal">✕</button>
+      </div>
+      <div class="modal__body" id="displaySettingsBody"></div>
+    </div>
+  </div>
+
+  <div id="complianceModal" class="modal" hidden>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h3>Проверки</h3>
+        <button class="btn btn--icon" id="btnCloseComplianceModal">✕</button>
+      </div>
+      <div class="modal__body" id="complianceSettingsBody"></div>
+    </div>
+  </div>
+
+  <div id="duplicateModal" class="modal" hidden>
+    <div class="modal__content modal__content--wide modal__content--duplicates">
+      <div class="modal__header">
+        <h3>Дубликаты Tag</h3>
+        <button class="btn btn--icon" id="btnCloseDuplicateModal">✕</button>
+      </div>
+      <div class="modal__body" id="duplicateSettingsBody"></div>
+    </div>
+  </div>
+
+  <div id="tagEditModal" class="modal" hidden>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h3>Редактирование TAG</h3>
+        <button class="btn btn--icon" id="btnCloseTagEditModal">✕</button>
+      </div>
+      <div class="modal__body" id="tagEditSettingsBody"></div>
+    </div>
+  </div>
+
+  <div id="exportObjectsModal" class="modal" hidden>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h3>Выгрузка объектов</h3>
+        <button class="btn btn--icon" id="btnCloseExportModal">✕</button>
+      </div>
+      <div class="modal__body" id="exportObjectsBody"></div>
+    </div>
+  </div>
+
+  <div id="helpModal" class="modal" hidden>
+    <div class="modal__content modal__content--wide">
+      <div class="modal__header">
+        <h3>Справка</h3>
+        <button class="btn btn--icon" id="btnCloseHelpModal">✕</button>
+      </div>
+      <div class="modal__body help-body" id="helpBody"></div>
+    </div>
+  </div>
+
+  <script src="/js/api.js?v=20260907v"></script>
+  <script src="/js/symbols.js?v=20260907v"></script>
+  <script src="/js/renderer.js?v=20260907v"></script>
+  <script src="/js/explorer.js?v=20260907v"></script>
+  <script src="/js/table-layout.js?v=20260907v"></script>
+  <script src="/js/inspector.js?v=20260907v"></script>
+  <script src="/js/display-settings-form.js?v=20260907v"></script>
+  <script src="/js/wincc-oa-drop.js?v=20260907v"></script>
+  <script src="/js/app.js?v=20260907v"></script>
+</body>
+</html>

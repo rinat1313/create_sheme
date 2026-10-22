@@ -1,0 +1,2 @@
+ALTER TABLE solutions
+    ADD COLUMN IF NOT EXISTS import_error TEXT NOT NULL DEFAULT '';

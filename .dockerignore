@@ -1,0 +1,10 @@
+.git
+.idea
+.vscode
+.cursor
+bin
+*.xml
+PrimaryData.xml
+Solution.xml
+.env
+**/*_test.go

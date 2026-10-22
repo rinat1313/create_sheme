@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: solution
+      POSTGRES_PASSWORD: solution
+      POSTGRES_DB: solution
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solution"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 1536mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    restart: unless-stopped
+
+  api:
+    build: .
+    mem_limit: 11g
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      WEB_DIR: /app/web
+      DATABASE_URL: postgres://solution:solution@postgres:5432/solution?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      REDIS_DIAL_TIMEOUT: "2s"
+      REDIS_READ_TIMEOUT: "500ms"
+      REDIS_WRITE_TIMEOUT: "500ms"
+      CACHE_SCHEME_TTL: "15m"
+      CACHE_SCHEME_OBJECTS_TTL: "15m"
+      CACHE_COMPLIANCE_TTL: "5m"
+      CACHE_MAX_VALUE_BYTES: "2097152"
+      LOG_LEVEL: info
+      IMPORT_MAX_BYTES: "1073741824"
+      HTTP_READ_HEADER_TIMEOUT: "30s"
+      HTTP_READ_TIMEOUT: "30m"
+      HTTP_WRITE_TIMEOUT: "30m"
+      HTTP_IDLE_TIMEOUT: "120s"
+      GOMEMLIMIT: "10GiB"
+      GOGC: "100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./migrations:/app/migrations:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
