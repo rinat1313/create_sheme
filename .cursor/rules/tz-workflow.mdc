@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Рабочий процесс по ТЗ
 
-Перед чтением skills подтяни `origin/main` (правило `cursor-config-on-main.mdc`). При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`). На этапе 2 — skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 — skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). На этапе 4 — skill `tz-tasks` (`.cursor/skills/tz-tasks/SKILL.md`). На этапе 5 — skill `tz-execute` (`.cursor/skills/tz-execute/SKILL.md`). На этапе 6 — skill `tz-verify` (`.cursor/skills/tz-verify/SKILL.md`). На этапе 7 — skill `tz-docs` (`.cursor/skills/tz-docs/SKILL.md`). На этапе 8 — skill `tz-report` (`.cursor/skills/tz-report/SKILL.md`). Они дополняют `tz-workflow` и не меняют обязательную цепочку. На этапах 1–4 и при пересмотре решения читай skill `tz-specialists` (`.cursor/skills/tz-specialists/SKILL.md`). На этапах 4–5 читай skill `tz-executors` (`.cursor/skills/tz-executors/SKILL.md`). На этапах 4 и 6 читай skill `tz-testers` (`.cursor/skills/tz-testers/SKILL.md`). При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах вопросов, решений, выполнения и проверки UI. На этапе 7 дополнительно читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`).
+Перед чтением skills подтяни `origin/main` (правило `cursor-config-on-main.mdc`). При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`). На этапе 2 — skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 — skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). На этапе 4 — skill `tz-tasks` (`.cursor/skills/tz-tasks/SKILL.md`). На этапе 5 — skill `tz-execute` (`.cursor/skills/tz-execute/SKILL.md`). На этапе 6 — skill `tz-verify` (`.cursor/skills/tz-verify/SKILL.md`). На этапе 7 — skill `tz-docs` (`.cursor/skills/tz-docs/SKILL.md`). На этапе 8 — skill `tz-report` (`.cursor/skills/tz-report/SKILL.md`). Они дополняют `tz-workflow` и не меняют обязательную цепочку. На этапах 1–4 и при пересмотре решения читай skill `tz-specialists` (`.cursor/skills/tz-specialists/SKILL.md`). На этапах 4–5 читай skill `tz-executors` (`.cursor/skills/tz-executors/SKILL.md`). На этапах 4 и 6 читай skill `tz-testers` (`.cursor/skills/tz-testers/SKILL.md`). На этапах 4 и 7 читай skill `tz-writers` (`.cursor/skills/tz-writers/SKILL.md`). При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах вопросов, решений, выполнения и проверки UI. На этапе 7 дополнительно читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`).
 
 ## Обязательность этапов
 
@@ -14,10 +14,10 @@ alwaysApply: true
 1. Получение ТЗ — вызови **lead**; lead читает `tz-intake` и линзу аналитика из `tz-specialists` (оценка, доступ, пакет).
 2. Подготовка вопросов — **lead** по skill `tz-questions` и `tz-specialists` (кратко, если scope узкий); вопросы пользователю задаёт только lead.
 3. Подготовка решений — **lead** по skill `tz-solutions` и `tz-specialists`; дважды проверяет противоречия между линзами и готовит пакет для пула задач.
-4. Подготовка задач — **lead** по skill `tz-tasks`, `tz-specialists`, `tz-executors` и `tz-testers` (черновик по зонам, ролям исполнения и проверки, анализ, гейт решений, финальный пул).
+4. Подготовка задач — **lead** по skill `tz-tasks`, `tz-specialists`, `tz-executors`, `tz-testers` и `tz-writers` (черновик по зонам, ролям исполнения, проверки и текстов, анализ, гейт решений, финальный пул).
 5. Выполнение задач — **lead** по skill `tz-execute` и `tz-executors` (реализация линзами backend/frontend/SQL/DevOps, локальная проверка своей задачи, отчёт; нет проблем — этап 6; недочёт — доработка на 5; слом набора — возврат на этап 3).
 6. Проверка выполненной работы — **lead** по skill `tz-verify` и `tz-testers`: отчёт этапа 5; линзы QA/manual/SQL; во время прогона не править код и документацию «заодно»; неуспех — разбор и переделка на 5; более 10 неуспехов задачи — пересмотр решения с `tz-specialists`; успех — пакет для этапа 7.
-7. Подготовка документации — **lead** по skill `tz-docs`: пакет этапа 6; правит руководство и help (если help есть); информация для пользователя — отдельная задача; тексты простым языком; нет пользовательских изменений — N/A.
+7. Подготовка документации — **lead** по skill `tz-docs` и `tz-writers`: пакет этапа 6; линза технического писателя; правит руководство и help (если help есть); информация для пользователя — отдельная задача; тексты простым языком; нет пользовательских изменений — N/A.
 8. Подготовка отчетов — **lead** по skill `tz-report`: после успеха этапов 6 и 7 пишет краткий отчёт (ТЗ, вопросы и ответы, решения, пул со статусами, тесты, docs/help, необязательные рекомендации) и закрывает ТЗ в `main`.
 
 Пропуск этапов workflow **запрещён**. Неприменимый этап — явный N/A в отчёте lead.
@@ -28,7 +28,7 @@ alwaysApply: true
 |----------|------|------------|
 | lead | `.cursor/agents/lead.md` | Все 8 этапов: координация, вопросы, решения, задачи, код, проверка, документация, отчёты |
 
-Других файлов в `.cursor/agents/` нет. Не создавай и не вызывай worker, архитектора, дизайнера, тестировщиков и технического писателя. Группа Специалисты — skill `tz-specialists`, не агенты. Группа Исполнители — skill `tz-executors`, не агенты. Группа Тестировщики — skill `tz-testers`, не агенты.
+Других файлов в `.cursor/agents/` нет. Не создавай и не вызывай worker, архитектора, дизайнера, тестировщиков и технического писателя. Группа Специалисты — skill `tz-specialists`, не агенты. Группа Исполнители — skill `tz-executors`, не агенты. Группа Тестировщики — skill `tz-testers`, не агенты. Группа Технические писатели — skill `tz-writers`, не агенты.
 
 ## Завершение и git
 

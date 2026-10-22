@@ -23,7 +23,7 @@ Skill **дополняет** `tz-workflow`. Не заменяет его. Не �
 
 ## Связь с tz-workflow
 
-1. Обязательная цепочка — 8 этапов `tz-workflow`. Этап 7 ведёт skill `tz-docs`; этот skill задаёт слои и стиль текстов.
+1. Обязательная цепочка — 8 этапов `tz-workflow`. Этап 7 ведёт skill `tz-docs`; линза группы — `tz-writers`; этот skill задаёт слои и стиль текстов.
 2. Git, коммиты и DoD по `tz-workflow`, `commit-to-main`, `merge-to-main`.
 3. Help на сайте — по правилу `update-user-help`. Этот skill добавляет руководство и стиль текстов.
 4. Skill `ui-ux` задаёт, как делать UI; этот skill задаёт, как описать результат пользователю.
