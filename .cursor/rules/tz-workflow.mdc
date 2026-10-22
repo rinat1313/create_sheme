@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Рабочий процесс по ТЗ
 
-При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`.
+При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах дизайнер, worker и тестировщик UI интерфейса; он дополняет `tz-workflow` и не меняет обязательную цепочку.
 
 ## Обязательность специалистов
 

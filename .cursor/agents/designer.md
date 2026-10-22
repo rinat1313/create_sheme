@@ -23,6 +23,7 @@ readonly: true
 
 - JavaScript, CSS, HTML.
 - Визуальная согласованность и удобство интерфейса.
+- При UI читай `.cursor/skills/ui-ux/SKILL.md` (дополняет `tz-workflow`).
 
 ## Формат обратной связи
 
