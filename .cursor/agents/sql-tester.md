@@ -1,7 +1,7 @@
 ---
 name: sql-tester
 description: SQL тестировщик. Вызывай через Task на этапе 6 для проверки БД и запросов. Не чинит продукт. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: true
 ---
 

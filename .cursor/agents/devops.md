@@ -1,7 +1,7 @@
 ---
 name: devops
 description: DevOps. Вызывай через Task на этапе 5 для конфигов, деплоя, Docker. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: false
 ---
 

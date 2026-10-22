@@ -1,7 +1,7 @@
 ---
 name: qa-tester
 description: QA тестировщик. Вызывай через Task на этапе 6 для автотестов и проверки кода. Не чинит продукт. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: false
 ---
 

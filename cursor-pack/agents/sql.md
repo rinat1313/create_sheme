@@ -1,7 +1,7 @@
 ---
 name: sql
 description: SQL программист. Вызывай через Task на этапе 5 для миграций и запросов. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: frontend
 description: Frontend программист. Вызывай через Task на этапе 5 для HTML/CSS/JS. Skill ui-ux. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: false
 ---
 

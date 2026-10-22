@@ -1,7 +1,7 @@
 ---
 name: technical-writer
 description: Технический писатель. Вызывай через Task на этапе 7 для руководства и help. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: false
 ---
 

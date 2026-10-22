@@ -1,7 +1,7 @@
 ---
 name: backend
 description: Backend программист. Вызывай через Task на этапе 5 для Go API и сервисов. Не спрашивает пользователя.
-model: inherit
+model: composer-2.5
 readonly: false
 ---
 
