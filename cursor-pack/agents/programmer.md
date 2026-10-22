@@ -1,7 +1,7 @@
 ---
 name: programmer
 description: Специалист по программированию. Вызывай через Task на этапах 2–4. Паттерны и границы модулей, не реализация. Не спрашивает пользователя.
-model: inherit
+model: grok-4.6-medium
 readonly: true
 ---
 

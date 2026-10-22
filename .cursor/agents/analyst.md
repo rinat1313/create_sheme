@@ -1,7 +1,7 @@
 ---
 name: analyst
 description: Аналитик ТЗ. Вызывай через Task с этапа 1. Соответствие приложению, направление, сложность. Не спрашивает пользователя.
-model: inherit
+model: grok-4.6-medium
 readonly: true
 ---
 

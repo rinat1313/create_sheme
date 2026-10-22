@@ -1,7 +1,7 @@
 ---
 name: database
 description: Специалист по базам хранения данных. Вызывай через Task на этапах 2–4. Модель хранения, индексы. Не спрашивает пользователя.
-model: inherit
+model: grok-4.6-medium
 readonly: true
 ---
 

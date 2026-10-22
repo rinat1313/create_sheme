@@ -1,7 +1,7 @@
 ---
 name: ui-ux-designer
 description: UI/UX дизайнер. Вызывай через Task при frontend/UI на этапах 2–4. Skill ui-ux. Не спрашивает пользователя.
-model: inherit
+model: grok-4.6-medium
 readonly: true
 ---
 
