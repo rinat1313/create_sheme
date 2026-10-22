@@ -30,6 +30,7 @@ alwaysApply: true
 - Оставлять готовую работу только в feature-ветке.
 - Считать задачу выполненной без merge в `main`.
 - Пропускать merge, если тесты и условия DoD пройдены.
+- Оставлять новые rules, skills или subagents только в `cursor/*` без merge в `origin/main`.
 
 ## Если remote отсутствует
 

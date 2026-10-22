@@ -7,6 +7,8 @@ description: Рабочий процесс выполнения ТЗ. Приме
 
 Это основной skill при получении ТЗ. Этапы 1–5 детализированы skills `tz-intake`, `tz-questions`, `tz-solutions`, `tz-tasks` и `tz-execute`. Этапы 6–8 пока каркас: не выдумывай толстые регламенты внутри них.
 
+Актуальная копия этого skill и остальных `.cursor/skills` — ветка `origin/main` (правило `cursor-config-on-main`). Перед этапами `git fetch origin main` и читай файлы с `origin/main`, если локальный snapshot старше.
+
 Дополнения (не заменяют эту цепочку): `tz-intake` на этапе 1; `tz-questions` на этапе 2; `tz-solutions` на этапе 3; `tz-tasks` на этапе 4; `tz-execute` на этапе 5; `ui-ux` при frontend/UI; `user-docs` после пользовательских изменений.
 
 ## Обязательная цепочка
