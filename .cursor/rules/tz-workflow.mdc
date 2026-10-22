@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Рабочий процесс по ТЗ
 
-Перед чтением skills подтяни `origin/main` (правило `cursor-config-on-main.mdc`). При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`) до архитектора и дизайнера. На этапе 2 специалисты и lead читают skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 — skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). На этапе 4 — skill `tz-tasks` (`.cursor/skills/tz-tasks/SKILL.md`). На этапе 5 — skill `tz-execute` (`.cursor/skills/tz-execute/SKILL.md`). На этапе 6 — skill `tz-verify` (`.cursor/skills/tz-verify/SKILL.md`). На этапе 7 — skill `tz-docs` (`.cursor/skills/tz-docs/SKILL.md`). Они дополняют `tz-workflow` и не меняют обязательную цепочку. При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах дизайнер, worker и тестировщик UI интерфейса. На этапе 7 дополнительно читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`) (стиль слоёв) и вызывай технического писателя.
+Перед чтением skills подтяни `origin/main` (правило `cursor-config-on-main.mdc`). При получении или выполнении ТЗ **ВСЕГДА** следуй skill `tz-workflow` из `.cursor/skills/tz-workflow/SKILL.md`. На этапе 1 lead читает skill `tz-intake` (`.cursor/skills/tz-intake/SKILL.md`) до архитектора и дизайнера. На этапе 2 специалисты и lead читают skill `tz-questions` (`.cursor/skills/tz-questions/SKILL.md`). На этапе 3 — skill `tz-solutions` (`.cursor/skills/tz-solutions/SKILL.md`). На этапе 4 — skill `tz-tasks` (`.cursor/skills/tz-tasks/SKILL.md`). На этапе 5 — skill `tz-execute` (`.cursor/skills/tz-execute/SKILL.md`). На этапе 6 — skill `tz-verify` (`.cursor/skills/tz-verify/SKILL.md`). На этапе 7 — skill `tz-docs` (`.cursor/skills/tz-docs/SKILL.md`). На этапе 8 — skill `tz-report` (`.cursor/skills/tz-report/SKILL.md`). Они дополняют `tz-workflow` и не меняют обязательную цепочку. При frontend/UI дополнительно читай skill `ui-ux` (`.cursor/skills/ui-ux/SKILL.md`) на этапах дизайнер, worker и тестировщик UI интерфейса. На этапе 7 дополнительно читай skill `user-docs` (`.cursor/skills/user-docs/SKILL.md`) (стиль слоёв) и вызывай технического писателя.
 
 ## Обязательность специалистов
 
@@ -18,7 +18,7 @@ alwaysApply: true
 5. Выполнение задач — **worker** по skill `tz-execute` (своя зона, локальная проверка своей задачи, отчёт lead; нет проблем — этап 6; недочёт в зоне — доработка на 5; слом набора — возврат на этап 3).
 6. Проверка выполненной работы — **тестировщик** (и при UI **тестировщик UI интерфейса**) по skill `tz-verify`: lead передаёт отчёт этапа 5; тестировщики не правят код и документацию; неуспех — разбор lead и переделка на 5; более 10 неуспехов задачи — пересмотр решения со специалистами; успех — пакет для этапа 7.
 7. Подготовка документации — **технический писатель** по skill `tz-docs`: lead передаёт пакет этапа 6; писатели анализируют и правят руководство и help (если help есть); информация для пользователя — отдельная задача; тексты простым языком; нет пользовательских изменений — N/A.
-8. Подготовка отчетов — **lead** формирует отчёт и закрывает ТЗ.
+8. Подготовка отчетов — **lead** по skill `tz-report`: после успеха этапов 6 и 7 пишет краткий отчёт (ТЗ, вопросы и ответы, решения, пул со статусами, тесты, docs/help, необязательные рекомендации) и закрывает ТЗ в `main`.
 
 Пропуск этапов workflow **запрещён**. Неприменимый этап — явный N/A в отчёте lead.
 
