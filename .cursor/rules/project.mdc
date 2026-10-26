@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Слияние с основной веткой
 
-**Постоянное правило:** после выполнения задачи и прохождения всех тестов и условий DoD изменения **обязательно** должны быть **закоммичены** в ветку `main`. Подробности — в правилах `commit-to-main.mdc`, `merge-to-main.mdc` и `cursor-config-on-main.mdc`.
+**Постоянное правило:** после выполнения задачи изменения **обязательно** должны быть **закоммичены** в ветку `main`. Для ТЗ — только после **успешного прохождения всех 8 этапов**, затем merge в `main`. Подробности — `tz-merge-after-stages.mdc`, `commit-to-main.mdc`, `merge-to-main.mdc`, `cursor-config-on-main.mdc`.
 
 Актуальные `.cursor/rules`, `.cursor/skills` и `.cursor/agents` живут только в `origin/main`. Перед чтением или добавлением skills подтяни `origin/main`, не доверяй устаревшему snapshot.
 
