@@ -75,6 +75,7 @@ func openChangedObjectsTestEnv(t *testing.T) (*SolutionService, *repository.Stor
 		"migrations/021_solution_objects_technology_id.sql",
 		"migrations/022_solution_changed_objects.sql",
 		"migrations/023_compliance_duplicate_technology_id.sql",
+		"migrations/024_tag_edit_rule_selection.sql",
 	}
 	for _, rel := range files {
 		sqlBytes, readErr := os.ReadFile(filepath.Join(root, rel))

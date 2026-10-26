@@ -8,14 +8,19 @@ import (
 )
 
 type TagEditRule struct {
-	ID            uuid.UUID `json:"id"`
-	UserID        uuid.UUID `json:"user_id"`
-	TextCondition string    `json:"text_condition"`
-	Pattern       string    `json:"pattern"`
-	Action        string    `json:"action"`
-	Replacement   string    `json:"replacement"`
-	SortOrder     int       `json:"sort_order"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID               uuid.UUID `json:"id"`
+	UserID           uuid.UUID `json:"user_id"`
+	TextCondition    string    `json:"text_condition"`
+	Pattern          string    `json:"pattern"`
+	Action           string    `json:"action"`
+	Replacement      string    `json:"replacement"`
+	Template         string    `json:"template"`
+	EmptyAllowed     bool      `json:"empty_allowed"`
+	CheckProperties  bool      `json:"check_properties"`
+	CheckCommands    bool      `json:"check_commands"`
+	CheckProtections bool      `json:"check_protections"`
+	SortOrder        int       `json:"sort_order"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type TagEditJob struct {
@@ -32,7 +37,9 @@ type TagEditJob struct {
 
 func (s *Store) ListTagEditRules(ctx context.Context, userID uuid.UUID) ([]TagEditRule, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, user_id, text_condition, pattern, action, replacement, sort_order, created_at
+		SELECT id, user_id, text_condition, pattern, action, replacement,
+		       template, empty_allowed, check_properties, check_commands, check_protections,
+		       sort_order, created_at
 		FROM tag_edit_rules WHERE user_id=$1 ORDER BY sort_order, created_at`, userID)
 	if err != nil {
 		return nil, err
@@ -41,7 +48,11 @@ func (s *Store) ListTagEditRules(ctx context.Context, userID uuid.UUID) ([]TagEd
 	var result []TagEditRule
 	for rows.Next() {
 		var r TagEditRule
-		if err := rows.Scan(&r.ID, &r.UserID, &r.TextCondition, &r.Pattern, &r.Action, &r.Replacement, &r.SortOrder, &r.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&r.ID, &r.UserID, &r.TextCondition, &r.Pattern, &r.Action, &r.Replacement,
+			&r.Template, &r.EmptyAllowed, &r.CheckProperties, &r.CheckCommands, &r.CheckProtections,
+			&r.SortOrder, &r.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		result = append(result, r)
@@ -51,18 +62,27 @@ func (s *Store) ListTagEditRules(ctx context.Context, userID uuid.UUID) ([]TagEd
 
 func (s *Store) InsertTagEditRule(ctx context.Context, r TagEditRule) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO tag_edit_rules (id, user_id, text_condition, pattern, action, replacement, sort_order)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		r.ID, r.UserID, r.TextCondition, r.Pattern, r.Action, r.Replacement, r.SortOrder)
+		INSERT INTO tag_edit_rules (
+			id, user_id, text_condition, pattern, action, replacement,
+			template, empty_allowed, check_properties, check_commands, check_protections,
+			sort_order)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		r.ID, r.UserID, r.TextCondition, r.Pattern, r.Action, r.Replacement,
+		r.Template, r.EmptyAllowed, r.CheckProperties, r.CheckCommands, r.CheckProtections,
+		r.SortOrder)
 	return err
 }
 
 func (s *Store) UpdateTagEditRule(ctx context.Context, r TagEditRule) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE tag_edit_rules
-		SET text_condition=$3, pattern=$4, action=$5, replacement=$6, sort_order=$7
+		SET text_condition=$3, pattern=$4, action=$5, replacement=$6,
+		    template=$7, empty_allowed=$8, check_properties=$9, check_commands=$10, check_protections=$11,
+		    sort_order=$12
 		WHERE id=$1 AND user_id=$2`,
-		r.ID, r.UserID, r.TextCondition, r.Pattern, r.Action, r.Replacement, r.SortOrder)
+		r.ID, r.UserID, r.TextCondition, r.Pattern, r.Action, r.Replacement,
+		r.Template, r.EmptyAllowed, r.CheckProperties, r.CheckCommands, r.CheckProtections,
+		r.SortOrder)
 	return err
 }
 
