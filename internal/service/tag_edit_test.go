@@ -30,128 +30,200 @@ func TestMatchTagCondition(t *testing.T) {
 	}
 }
 
+func valveObj(tag string) domain.GraphicObject {
+	return domain.GraphicObject{
+		Id:  "obj-1",
+		Tag: tag,
+		TechnologyObject: []domain.TechnologyObject{{
+			Id:       "to-1",
+			Tag:      "TO-KEEP",
+			Template: "Valve",
+			TechnologyProperty: []domain.TechnologyProperty{
+				{Id: "p1", Name: "Param1", Tag: "PROP-OLD"},
+			},
+		}},
+	}
+}
+
 func TestApplyTagRulesToValue_Delete(t *testing.T) {
 	rules := []repository.TagEditRule{
-		{TextCondition: "contains", Pattern: "old", Action: "delete"},
+		{Template: "Valve", TextCondition: "contains", Pattern: "old", Action: "delete"},
 	}
-	got := applyTagRulesToValue(rules, "prefix-old-suffix")
+	obj := valveObj("prefix-old-suffix")
+	got := applyTagRulesToValue(rules, obj.Tag, obj, SolutionMetadata{})
 	if got != "" {
 		t.Fatalf("expected empty string, got %q", got)
 	}
-	got = applyTagRulesToValue(rules, "unchanged")
+	obj = valveObj("unchanged")
+	got = applyTagRulesToValue(rules, obj.Tag, obj, SolutionMetadata{})
 	if got != "unchanged" {
 		t.Fatalf("expected unchanged, got %q", got)
 	}
 }
 
-func TestApplyTagRulesToValue_Replace(t *testing.T) {
+func TestApplyTagRulesToValue_ReplaceFragment(t *testing.T) {
 	rules := []repository.TagEditRule{
-		{TextCondition: "starts_with", Pattern: "TMP_", Action: "replace", Replacement: "PROD_"},
+		{Template: "Valve", TextCondition: "starts_with", Pattern: "TMP_", Action: "replace", Replacement: "PROD_"},
 	}
-	got := applyTagRulesToValue(rules, "TMP_123")
-	if got != "PROD_" {
-		t.Fatalf("expected PROD_, got %q", got)
+	obj := valveObj("TMP_123")
+	got := applyTagRulesToValue(rules, obj.Tag, obj, SolutionMetadata{})
+	if got != "PROD_123" {
+		t.Fatalf("expected PROD_123, got %q", got)
 	}
-	got = applyTagRulesToValue(rules, "OTHER")
+	obj = valveObj("OTHER")
+	got = applyTagRulesToValue(rules, obj.Tag, obj, SolutionMetadata{})
 	if got != "OTHER" {
 		t.Fatalf("expected OTHER, got %q", got)
 	}
 }
 
+func TestApplyTagRulesToValue_ContainsReplaceAll(t *testing.T) {
+	rules := []repository.TagEditRule{
+		{Template: "Valve", TextCondition: "contains", Pattern: "A", Action: "replace", Replacement: "B"},
+	}
+	obj := valveObj("XAYAZ")
+	got := applyTagRulesToValue(rules, obj.Tag, obj, SolutionMetadata{})
+	if got != "XBYBZ" {
+		t.Fatalf("expected XBYBZ, got %q", got)
+	}
+}
+
 func TestApplyTagRulesToValue_Pipeline(t *testing.T) {
 	rules := []repository.TagEditRule{
-		{TextCondition: "contains", Pattern: "A", Action: "replace", Replacement: "B"},
-		{TextCondition: "contains", Pattern: "B", Action: "delete"},
+		{Template: "Valve", TextCondition: "contains", Pattern: "A", Action: "replace", Replacement: "B"},
+		{Template: "Valve", TextCondition: "contains", Pattern: "B", Action: "delete"},
 	}
-	got := applyTagRulesToValue(rules, "XA")
+	obj := valveObj("XA")
+	got := applyTagRulesToValue(rules, obj.Tag, obj, SolutionMetadata{})
 	if got != "" {
 		t.Fatalf("expected pipeline delete, got %q", got)
 	}
 }
 
-func TestApplyTagEditToObject_Properties(t *testing.T) {
+func TestApplyTagEditToObject_OnlyMainTag(t *testing.T) {
 	rules := []repository.TagEditRule{
-		{TextCondition: "contains", Pattern: "OLD", Action: "replace", Replacement: "NEW"},
+		{Template: "Valve", TextCondition: "contains", Pattern: "OLD", Action: "replace", Replacement: "NEW"},
 	}
-	obj := domain.GraphicObject{
-		Id:  "obj-1",
-		Tag: "MAIN-OLD",
-		TechnologyObject: []domain.TechnologyObject{{
-			Id:  "to-1",
-			Tag: "TO-OLD",
-			TechnologyProperty: []domain.TechnologyProperty{
-				{Id: "p1", Name: "Param1", Tag: "PROP-OLD"},
-				{Id: "p2", Name: "Param2", Tag: "KEEP"},
-			},
-		}},
-	}
-	updated, changed := applyTagEditToObject(obj, rules)
+	obj := valveObj("MAIN-OLD")
+	updated, changed := applyTagEditToObject(obj, rules, SolutionMetadata{})
 	if !changed {
 		t.Fatal("expected changed=true")
 	}
-	if updated.Tag != "NEW" {
-		t.Fatalf("expected NEW, got %q", updated.Tag)
+	if updated.Tag != "MAIN-NEW" {
+		t.Fatalf("expected MAIN-NEW, got %q", updated.Tag)
 	}
-	if updated.TechnologyObject[0].Tag != "NEW" {
-		t.Fatalf("expected NEW, got %q", updated.TechnologyObject[0].Tag)
+	if updated.TechnologyObject[0].Tag != "TO-KEEP" {
+		t.Fatalf("nested TO tag must stay, got %q", updated.TechnologyObject[0].Tag)
 	}
-	if updated.TechnologyObject[0].TechnologyProperty[0].Tag != "NEW" {
-		t.Fatalf("expected NEW, got %q", updated.TechnologyObject[0].TechnologyProperty[0].Tag)
-	}
-	if updated.TechnologyObject[0].TechnologyProperty[1].Tag != "KEEP" {
-		t.Fatalf("expected KEEP, got %q", updated.TechnologyObject[0].TechnologyProperty[1].Tag)
+	if updated.TechnologyObject[0].TechnologyProperty[0].Tag != "PROP-OLD" {
+		t.Fatalf("property tag must stay, got %q", updated.TechnologyObject[0].TechnologyProperty[0].Tag)
 	}
 }
 
-func TestApplyTagEditToControlCommand(t *testing.T) {
+func TestApplyTagEditToObject_SkipsOtherTemplate(t *testing.T) {
 	rules := []repository.TagEditRule{
-		{TextCondition: "starts_with", Pattern: "TMP_", Action: "delete"},
+		{Template: "Tank", TextCondition: "contains", Pattern: "OLD", Action: "replace", Replacement: "NEW"},
 	}
-	cmd := domain.ControlCommand{
-		Id:     "cmd-1",
-		Tag:    "TMP_CMD",
-		Target: "to-1",
-		TechnologyProperty: []domain.TechnologyProperty{
-			{Id: "cp1", Tag: "TMP_PROP"},
-			{Id: "cp2", Tag: "PROD_PROP"},
+	obj := valveObj("MAIN-OLD")
+	updated, changed := applyTagEditToObject(obj, rules, SolutionMetadata{})
+	if changed {
+		t.Fatal("expected no change for other template")
+	}
+	if updated.Tag != "MAIN-OLD" {
+		t.Fatalf("tag must stay, got %q", updated.Tag)
+	}
+}
+
+func TestApplyTagEditToObject_EmptyMainWithNestedTagFills(t *testing.T) {
+	rules := []repository.TagEditRule{
+		{
+			Template:        "Valve",
+			TextCondition:   "contains",
+			Pattern:         ".",
+			Action:          "replace",
+			Replacement:     "*",
+			EmptyAllowed:    false,
+			CheckProperties: true,
 		},
 	}
-	updated, changed := applyTagEditToControlCommand(cmd, rules)
+	obj := valveObj("")
+	updated, changed := applyTagEditToObject(obj, rules, SolutionMetadata{})
 	if !changed {
-		t.Fatal("expected changed=true")
+		t.Fatal("expected fill of main tag")
+	}
+	if updated.Tag != "*" {
+		t.Fatalf("expected *, got %q", updated.Tag)
+	}
+	if updated.TechnologyObject[0].TechnologyProperty[0].Tag != "PROP-OLD" {
+		t.Fatal("nested tag must not be written")
+	}
+}
+
+func TestApplyTagEditToObject_EmptyMainAndNestedNoOp(t *testing.T) {
+	rules := []repository.TagEditRule{
+		{
+			Template:        "Valve",
+			TextCondition:   "contains",
+			Pattern:         ".",
+			Action:          "replace",
+			Replacement:     "*",
+			EmptyAllowed:    false,
+			CheckProperties: true,
+		},
+	}
+	obj := valveObj("")
+	obj.TechnologyObject[0].TechnologyProperty[0].Tag = ""
+	updated, changed := applyTagEditToObject(obj, rules, SolutionMetadata{})
+	if changed {
+		t.Fatal("expected no-op when nested tags empty")
 	}
 	if updated.Tag != "" {
-		t.Fatalf("expected empty command tag, got %q", updated.Tag)
-	}
-	if updated.TechnologyProperty[0].Tag != "" {
-		t.Fatalf("expected empty property tag, got %q", updated.TechnologyProperty[0].Tag)
-	}
-	if updated.TechnologyProperty[1].Tag != "PROD_PROP" {
-		t.Fatalf("expected PROD_PROP unchanged, got %q", updated.TechnologyProperty[1].Tag)
+		t.Fatalf("expected empty, got %q", updated.Tag)
 	}
 }
 
-func TestApplyTagEditToAutomation(t *testing.T) {
+func TestApplyTagEditToObject_EmptyAllowedSkipsEmpty(t *testing.T) {
 	rules := []repository.TagEditRule{
-		{TextCondition: "contains", Pattern: "BAD", Action: "replace", Replacement: "OK"},
-	}
-	auto := domain.Automation{
-		Id:     "auto-1",
-		Tag:    "AUTO-BAD",
-		Target: "obj-1",
-		TechnologyProperty: []domain.TechnologyProperty{
-			{Id: "ap1", Tag: "PROP-BAD"},
+		{
+			Template:        "Valve",
+			TextCondition:   "contains",
+			Pattern:         ".",
+			Action:          "replace",
+			Replacement:     "*",
+			EmptyAllowed:    true,
+			CheckProperties: true,
 		},
 	}
-	updated, changed := applyTagEditToAutomation(auto, rules)
+	obj := valveObj("")
+	_, changed := applyTagEditToObject(obj, rules, SolutionMetadata{})
+	if changed {
+		t.Fatal("empty allowed must skip empty main tag")
+	}
+}
+
+func TestApplyTagEditToObject_EmptyMainWithCommandTag(t *testing.T) {
+	rules := []repository.TagEditRule{
+		{
+			Template:      "Valve",
+			TextCondition: "contains",
+			Pattern:       ".",
+			Action:        "replace",
+			Replacement:   "#",
+			EmptyAllowed:  false,
+			CheckCommands: true,
+		},
+	}
+	obj := valveObj("")
+	obj.TechnologyObject[0].TechnologyProperty[0].Tag = ""
+	meta := SolutionMetadata{
+		Commands: []domain.ControlCommand{{Id: "c1", Tag: "CMD", Target: "obj-1"}},
+	}
+	updated, changed := applyTagEditToObject(obj, rules, meta)
 	if !changed {
-		t.Fatal("expected changed=true")
+		t.Fatal("expected fill from command tag")
 	}
-	if updated.Tag != "OK" {
-		t.Fatalf("expected OK, got %q", updated.Tag)
-	}
-	if updated.TechnologyProperty[0].Tag != "OK" {
-		t.Fatalf("expected OK, got %q", updated.TechnologyProperty[0].Tag)
+	if updated.Tag != "#" {
+		t.Fatalf("expected #, got %q", updated.Tag)
 	}
 }
 

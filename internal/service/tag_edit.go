@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	ErrTagEditJobActive   = errors.New("tag edit job already running for this solution")
-	ErrTagEditNoRules     = errors.New("no tag edit rules configured")
-	ErrTagEditEmptyPattern = errors.New("pattern must not be empty")
+	ErrTagEditJobActive      = errors.New("tag edit job already running for this solution")
+	ErrTagEditNoRules        = errors.New("no tag edit rules configured")
+	ErrTagEditEmptyPattern   = errors.New("pattern must not be empty")
+	ErrTagEditEmptyTemplate  = errors.New("object type must not be empty")
 )
 
 var tagEditJobLocks sync.Map
@@ -29,12 +30,17 @@ func tagEditMarksSolutionDirty(changed int) bool {
 }
 
 type TagEditRuleInput struct {
-	ID            string `json:"id"`
-	TextCondition string `json:"text_condition"`
-	Pattern       string `json:"pattern"`
-	Action        string `json:"action"`
-	Replacement   string `json:"replacement"`
-	SortOrder     int    `json:"sort_order"`
+	ID               string `json:"id"`
+	TextCondition    string `json:"text_condition"`
+	Pattern          string `json:"pattern"`
+	Action           string `json:"action"`
+	Replacement      string `json:"replacement"`
+	Template         string `json:"template"`
+	EmptyAllowed     bool   `json:"empty_allowed"`
+	CheckProperties  bool   `json:"check_properties"`
+	CheckCommands    bool   `json:"check_commands"`
+	CheckProtections bool   `json:"check_protections"`
+	SortOrder        int    `json:"sort_order"`
 }
 
 type TagEditPreview struct {
@@ -57,17 +63,8 @@ func (s *SolutionService) CreateTagEditRule(ctx context.Context, input TagEditRu
 		slog.Info("CreateTagEditRule done", "duration_ms", time.Since(start).Milliseconds(), "err", err)
 	}()
 
-	rule := repository.TagEditRule{
-		ID:            uuid.New(),
-		UserID:        UserIDFromContext(ctx),
-		TextCondition: normalizeTagTextCondition(input.TextCondition),
-		Pattern:       strings.TrimSpace(input.Pattern),
-		Action:        normalizeTagAction(input.Action),
-		Replacement:   input.Replacement,
-		SortOrder:     input.SortOrder,
-	}
-	if rule.Pattern == "" {
-		err = ErrTagEditEmptyPattern
+	rule, err := buildTagEditRule(uuid.New(), UserIDFromContext(ctx), input)
+	if err != nil {
 		return rule, err
 	}
 	err = s.store.InsertTagEditRule(ctx, rule)
@@ -85,17 +82,9 @@ func (s *SolutionService) UpdateTagEditRule(ctx context.Context, input TagEditRu
 	if err != nil {
 		return err
 	}
-	rule := repository.TagEditRule{
-		ID:            id,
-		UserID:        UserIDFromContext(ctx),
-		TextCondition: normalizeTagTextCondition(input.TextCondition),
-		Pattern:       strings.TrimSpace(input.Pattern),
-		Action:        normalizeTagAction(input.Action),
-		Replacement:   input.Replacement,
-		SortOrder:     input.SortOrder,
-	}
-	if rule.Pattern == "" {
-		err = ErrTagEditEmptyPattern
+	rule, buildErr := buildTagEditRule(id, UserIDFromContext(ctx), input)
+	if buildErr != nil {
+		err = buildErr
 		return err
 	}
 	err = s.store.UpdateTagEditRule(ctx, rule)
@@ -149,7 +138,95 @@ func matchTagCondition(textCondition, pattern, tag string) bool {
 	return matched
 }
 
-func applyTagRulesToValue(rules []repository.TagEditRule, tag string) string {
+func buildTagEditRule(id, userID uuid.UUID, input TagEditRuleInput) (repository.TagEditRule, error) {
+	rule := repository.TagEditRule{
+		ID:               id,
+		UserID:           userID,
+		TextCondition:    normalizeTagTextCondition(input.TextCondition),
+		Pattern:          strings.TrimSpace(input.Pattern),
+		Action:           normalizeTagAction(input.Action),
+		Replacement:      input.Replacement,
+		Template:         strings.TrimSpace(input.Template),
+		EmptyAllowed:     input.EmptyAllowed,
+		CheckProperties:  input.CheckProperties,
+		CheckCommands:    input.CheckCommands,
+		CheckProtections: input.CheckProtections,
+		SortOrder:        input.SortOrder,
+	}
+	if rule.Template == "" {
+		return rule, ErrTagEditEmptyTemplate
+	}
+	if rule.Pattern == "" {
+		return rule, ErrTagEditEmptyPattern
+	}
+	return rule, nil
+}
+
+func isTagEmpty(tag string) bool {
+	return strings.TrimSpace(tag) == ""
+}
+
+func applySubstringReplace(textCondition, pattern, replacement, tag string) string {
+	if pattern == "" {
+		return tag
+	}
+	switch textCondition {
+	case "starts_with":
+		if strings.HasPrefix(tag, pattern) {
+			return replacement + tag[len(pattern):]
+		}
+	case "ends_with":
+		if strings.HasSuffix(tag, pattern) {
+			return tag[:len(tag)-len(pattern)] + replacement
+		}
+	default:
+		return strings.ReplaceAll(tag, pattern, replacement)
+	}
+	return tag
+}
+
+func nestedBlocksHaveTag(obj domain.GraphicObject, rule repository.TagEditRule, meta SolutionMetadata) bool {
+	start := time.Now()
+	var found bool
+	defer func() {
+		slog.Debug("nestedBlocksHaveTag done", "object_id", obj.Id, "found", found, "duration_ms", time.Since(start).Milliseconds())
+	}()
+	if rule.CheckProperties {
+		for _, to := range obj.TechnologyObject {
+			for _, prop := range to.TechnologyProperty {
+				if !isTagEmpty(prop.Tag) {
+					found = true
+					return true
+				}
+			}
+		}
+	}
+	if rule.CheckCommands {
+		for _, cmd := range meta.Commands {
+			if !matchesTarget(cmd.Target, obj) {
+				continue
+			}
+			if !isTagEmpty(cmd.Tag) {
+				found = true
+				return true
+			}
+		}
+	}
+	if rule.CheckProtections {
+		for _, auto := range meta.Automations {
+			if !matchesTarget(auto.Target, obj) {
+				continue
+			}
+			if !isTagEmpty(auto.Tag) {
+				found = true
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func applyTagRulesToValue(rules []repository.TagEditRule, tag string, obj domain.GraphicObject, meta SolutionMetadata) string {
 	start := time.Now()
 	defer func() {
 		slog.Debug("applyTagRulesToValue done", "rules", len(rules), "duration_ms", time.Since(start).Milliseconds())
@@ -157,12 +234,27 @@ func applyTagRulesToValue(rules []repository.TagEditRule, tag string) string {
 	slog.Debug("applyTagRulesToValue start", "rules", len(rules))
 	value := tag
 	for _, rule := range rules {
+		if rule.Template == "" || obj.TechnologyTemplate() != rule.Template {
+			continue
+		}
+		if isTagEmpty(value) {
+			if rule.EmptyAllowed {
+				continue
+			}
+			if !nestedBlocksHaveTag(obj, rule, meta) {
+				continue
+			}
+			if rule.Action == "replace" && rule.Replacement != "" {
+				value = rule.Replacement
+			}
+			continue
+		}
 		if !matchTagCondition(rule.TextCondition, rule.Pattern, value) {
 			continue
 		}
 		switch rule.Action {
 		case "replace":
-			value = rule.Replacement
+			value = applySubstringReplace(rule.TextCondition, rule.Pattern, rule.Replacement, value)
 		default:
 			value = ""
 		}
@@ -170,88 +262,19 @@ func applyTagRulesToValue(rules []repository.TagEditRule, tag string) string {
 	return value
 }
 
-func applyTagEditToTechnologyProperties(props []domain.TechnologyProperty, rules []repository.TagEditRule) ([]domain.TechnologyProperty, bool) {
-	start := time.Now()
-	var changed bool
-	defer func() {
-		slog.Debug("applyTagEditToTechnologyProperties done", "props", len(props), "changed", changed, "duration_ms", time.Since(start).Milliseconds())
-	}()
-	slog.Debug("applyTagEditToTechnologyProperties start", "props", len(props))
-	for i := range props {
-		newTag := applyTagRulesToValue(rules, props[i].Tag)
-		if newTag != props[i].Tag {
-			props[i].Tag = newTag
-			changed = true
-		}
-	}
-	return props, changed
-}
-
-func applyTagEditToObject(obj domain.GraphicObject, rules []repository.TagEditRule) (domain.GraphicObject, bool) {
+func applyTagEditToObject(obj domain.GraphicObject, rules []repository.TagEditRule, meta SolutionMetadata) (domain.GraphicObject, bool) {
 	start := time.Now()
 	var changed bool
 	defer func() {
 		slog.Debug("applyTagEditToObject done", "object_id", obj.Id, "changed", changed, "duration_ms", time.Since(start).Milliseconds())
 	}()
 	slog.Debug("applyTagEditToObject start", "object_id", obj.Id)
-	newTag := applyTagRulesToValue(rules, obj.Tag)
+	newTag := applyTagRulesToValue(rules, obj.Tag, obj, meta)
 	if newTag != obj.Tag {
 		obj.Tag = newTag
 		changed = true
 	}
-	if len(obj.TechnologyObject) > 0 {
-		newTOTag := applyTagRulesToValue(rules, obj.TechnologyObject[0].Tag)
-		if newTOTag != obj.TechnologyObject[0].Tag {
-			obj.TechnologyObject[0].Tag = newTOTag
-			changed = true
-		}
-		props, propsChanged := applyTagEditToTechnologyProperties(obj.TechnologyObject[0].TechnologyProperty, rules)
-		if propsChanged {
-			obj.TechnologyObject[0].TechnologyProperty = props
-			changed = true
-		}
-	}
 	return obj, changed
-}
-
-func applyTagEditToControlCommand(cmd domain.ControlCommand, rules []repository.TagEditRule) (domain.ControlCommand, bool) {
-	start := time.Now()
-	var changed bool
-	defer func() {
-		slog.Debug("applyTagEditToControlCommand done", "command_id", cmd.Id, "changed", changed, "duration_ms", time.Since(start).Milliseconds())
-	}()
-	slog.Debug("applyTagEditToControlCommand start", "command_id", cmd.Id)
-	newTag := applyTagRulesToValue(rules, cmd.Tag)
-	if newTag != cmd.Tag {
-		cmd.Tag = newTag
-		changed = true
-	}
-	props, propsChanged := applyTagEditToTechnologyProperties(cmd.TechnologyProperty, rules)
-	if propsChanged {
-		cmd.TechnologyProperty = props
-		changed = true
-	}
-	return cmd, changed
-}
-
-func applyTagEditToAutomation(auto domain.Automation, rules []repository.TagEditRule) (domain.Automation, bool) {
-	start := time.Now()
-	var changed bool
-	defer func() {
-		slog.Debug("applyTagEditToAutomation done", "automation_id", auto.Id, "changed", changed, "duration_ms", time.Since(start).Milliseconds())
-	}()
-	slog.Debug("applyTagEditToAutomation start", "automation_id", auto.Id)
-	newTag := applyTagRulesToValue(rules, auto.Tag)
-	if newTag != auto.Tag {
-		auto.Tag = newTag
-		changed = true
-	}
-	props, propsChanged := applyTagEditToTechnologyProperties(auto.TechnologyProperty, rules)
-	if propsChanged {
-		auto.TechnologyProperty = props
-		changed = true
-	}
-	return auto, changed
 }
 
 func (s *SolutionService) loadTagEditMetadata(ctx context.Context, solutionID uuid.UUID) (SolutionMetadata, error) {
@@ -274,8 +297,8 @@ func (s *SolutionService) loadTagEditMetadata(ctx context.Context, solutionID uu
 	return meta, nil
 }
 
-func countTagEditEntities(refs []tagEditObjectRef, meta SolutionMetadata) int {
-	return len(refs) + len(meta.Commands) + len(meta.Automations)
+func countTagEditEntities(refs []tagEditObjectRef) int {
+	return len(refs)
 }
 
 type tagEditObjectRef struct {
@@ -324,21 +347,9 @@ func (s *SolutionService) PreviewTagEdit(ctx context.Context, solutionID uuid.UU
 	}
 
 	refs := s.collectGraphicObjects(sol)
-	preview := TagEditPreview{TotalObjects: countTagEditEntities(refs, meta)}
+	preview := TagEditPreview{TotalObjects: countTagEditEntities(refs)}
 	for _, ref := range refs {
-		_, changed := applyTagEditToObject(ref.obj, rules)
-		if changed {
-			preview.ChangedObjects++
-		}
-	}
-	for _, cmd := range meta.Commands {
-		_, changed := applyTagEditToControlCommand(cmd, rules)
-		if changed {
-			preview.ChangedObjects++
-		}
-	}
-	for _, auto := range meta.Automations {
-		_, changed := applyTagEditToAutomation(auto, rules)
+		_, changed := applyTagEditToObject(ref.obj, rules, meta)
 		if changed {
 			preview.ChangedObjects++
 		}
@@ -383,18 +394,23 @@ func (s *SolutionService) StartTagEditJob(ctx context.Context, solutionID uuid.U
 		return uuid.Nil, err
 	}
 
+	activeTag, terr := s.store.HasActiveTagEditJob(ctx, solutionID)
+	if terr != nil {
+		err = terr
+		return uuid.Nil, err
+	}
+	if activeTag {
+		err = ErrTagEditJobActive
+		return uuid.Nil, err
+	}
+
 	if _, loaded := tagEditJobLocks.LoadOrStore(key, true); loaded {
 		err = ErrTagEditJobActive
 		return uuid.Nil, err
 	}
 
-	meta, err := s.loadTagEditMetadata(ctx, solutionID)
-	if err != nil {
-		tagEditJobLocks.Delete(key)
-		return uuid.Nil, err
-	}
 	objCount, _ := s.store.CountSolutionObjects(ctx, solutionID)
-	total := objCount + len(meta.Commands) + len(meta.Automations)
+	total := objCount
 
 	jobID := uuid.New()
 	job := repository.TagEditJob{
@@ -437,18 +453,18 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 		return
 	}
 
-	total := countTagEditEntities(s.collectGraphicObjects(sol), meta)
+	total := countTagEditEntities(s.collectGraphicObjects(sol))
+	slog.Info("runTagEditJob objects", "job_id", jobID, "total", total)
 	processed := 0
 	changed := 0
 	affectedSchemes := map[string]map[string]domain.GraphicObject{}
 	var changedEntityIDs []string
-	metadataChanged := false
 
 	for pi := range sol.Projects.Project {
 		for si := range sol.Projects.Project[pi].GraphicScheme {
 			scheme := &sol.Projects.Project[pi].GraphicScheme[si]
 			for oi := range scheme.GraphicObject {
-				updated, objectChanged := applyTagEditToObject(scheme.GraphicObject[oi], rules)
+				updated, objectChanged := applyTagEditToObject(scheme.GraphicObject[oi], rules, meta)
 				processed++
 				if objectChanged {
 					changed++
@@ -464,39 +480,6 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 				}
 			}
 		}
-	}
-
-	for i, cmd := range meta.Commands {
-		updated, cmdChanged := applyTagEditToControlCommand(cmd, rules)
-		processed++
-		if cmdChanged {
-			changed++
-			metadataChanged = true
-			meta.Commands[i] = updated
-			changedEntityIDs = append(changedEntityIDs, updated.Id)
-		}
-		if processed%50 == 0 || processed == total {
-			_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "running", processed, changed, "", nil)
-		}
-	}
-
-	for i, auto := range meta.Automations {
-		updated, autoChanged := applyTagEditToAutomation(auto, rules)
-		processed++
-		if autoChanged {
-			changed++
-			metadataChanged = true
-			meta.Automations[i] = updated
-			changedEntityIDs = append(changedEntityIDs, updated.Id)
-		}
-		if processed%50 == 0 || processed == total {
-			_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "running", processed, changed, "", nil)
-		}
-	}
-
-	if metadataChanged {
-		sol.ControlCommands.ControlCommand = meta.Commands
-		sol.Automations.Automation = meta.Automations
 	}
 
 	for schemeXMLID, objects := range affectedSchemes {
@@ -531,14 +514,6 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 		if updateErr := s.store.UpdateSchemePayload(ctx, solutionID, schemeXMLID, updatedPayload); updateErr != nil {
 			finished := time.Now()
 			_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, updateErr.Error(), &finished)
-			return
-		}
-	}
-
-	if metadataChanged {
-		if persistErr := s.persistSolutionMetadata(ctx, solutionID, meta); persistErr != nil {
-			finished := time.Now()
-			_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, persistErr.Error(), &finished)
 			return
 		}
 	}

@@ -1444,7 +1444,7 @@ body {
 .tag-edit-rules-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
 .tag-edit-rule {
   display: grid;
-  grid-template-columns: repeat(4, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(120px, 1fr)) auto;
   gap: 8px;
   padding: 12px;
   background: var(--bg-elevated);
@@ -1455,6 +1455,9 @@ body {
 .tag-edit-rule__group { display: flex; flex-direction: column; gap: 2px; }
 .tag-edit-rule__field { width: 100%; font-size: 12px; }
 .tag-edit-rule__delete { align-self: center; color: var(--state-alarm); }
+.tag-edit-rule__nested-group { grid-column: 1 / -2; }
+.tag-edit-rule__nested { display: flex; flex-wrap: wrap; gap: 12px; }
+.tag-edit-rule__check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 
 .export-field-block { margin-bottom: 12px; }
 .export-field-block .input, .export-field-block .props-field__input { width: 100%; }

@@ -1023,7 +1023,7 @@ func (a *API) handleTagEditRules(w http.ResponseWriter, r *http.Request) {
 		}
 		rule, err := a.svc.CreateTagEditRule(r.Context(), input)
 		if err != nil {
-			if errors.Is(err, service.ErrTagEditEmptyPattern) {
+			if errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
@@ -1056,7 +1056,7 @@ func (a *API) handleTagEditRuleItem(w http.ResponseWriter, r *http.Request) {
 		}
 		input.ID = id.String()
 		if err := a.svc.UpdateTagEditRule(r.Context(), input); err != nil {
-			if errors.Is(err, service.ErrTagEditEmptyPattern) {
+			if errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}

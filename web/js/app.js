@@ -154,7 +154,7 @@ const App = {
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (this.saving) {
+        if (this.saving || this.tagEditApplying) {
           e.preventDefault();
           return;
         }
@@ -1519,7 +1519,7 @@ const App = {
   },
 
   async save() {
-    if (!this.solutionId || this.saving) return;
+    if (!this.solutionId || this.saving || this.tagEditApplying) return;
 
     const overlay = document.getElementById('saveOverlay');
     const overlayTitle = document.getElementById('saveOverlayTitle');
@@ -1784,6 +1784,7 @@ const App = {
   },
 
   async showDisplaySettings() {
+    if (this.tagEditApplying) return;
     if (this.objectSettings.open) {
       const closed = await this.tryCloseObjectSettingsPanel();
       if (!closed) return;
@@ -2113,6 +2114,7 @@ const App = {
   },
 
   async showComplianceSettings() {
+    if (this.tagEditApplying) return;
     const rules = await API.getComplianceRules();
     const fieldRules = (rules || []).filter(r => r.text_condition !== 'duplicate_tag');
     const templates = this.solutionId
@@ -2578,6 +2580,7 @@ const App = {
   },
 
   async showDuplicateSettings() {
+    if (this.tagEditApplying) return;
     const rules = await API.getComplianceRules();
     const duplicateRule = (rules || []).find(r => r.text_condition === 'duplicate_tag') || null;
     const body = document.getElementById('duplicateSettingsBody');
@@ -3864,16 +3867,20 @@ const App = {
   },
 
   async showTagEditSettings() {
+    if (this.tagEditApplying) return;
     const rules = await API.getTagEditRules();
+    const templates = this.solutionId
+      ? (await API.getSolutionTemplates(this.solutionId)).map(t => t.template)
+      : (await API.getDisplaySettings()).map(s => s.template);
     const body = document.getElementById('tagEditSettingsBody');
-    body.innerHTML = '<p class="modal-hint">Правила применяются к Tag на GraphicObject и TechnologyObject[0] на всех схемах решения. Правила обрабатываются по порядку сверху вниз.</p>';
+    body.innerHTML = '<p class="modal-hint">Правила идут сверху вниз и меняют только основной Tag объекта выбранного типа на всех схемах. Если основной Tag пустой и «Пустое недопустимо», при непустом Tag в отмеченных блоках (Характеристики / Команды / Защиты) в основной Tag записывается текст замены. Сами вложенные Tag не меняются.</p>';
 
     const list = document.createElement('div');
     list.className = 'tag-edit-rules-list';
     list.id = 'tagEditRulesList';
 
     for (const rule of rules) {
-      list.appendChild(this.buildTagEditRuleRow(rule));
+      list.appendChild(this.buildTagEditRuleRow(rule, templates));
     }
     body.appendChild(list);
 
@@ -3882,11 +3889,16 @@ const App = {
     addBtn.textContent = '+ Добавить правило';
     addBtn.addEventListener('click', () => {
       list.appendChild(this.buildTagEditRuleRow({
+        template: templates[0] || 'Valve',
         text_condition: 'contains',
         pattern: '',
         action: 'delete',
         replacement: '',
-      }, true));
+        empty_allowed: true,
+        check_properties: false,
+        check_commands: false,
+        check_protections: false,
+      }, templates, true));
     });
     body.appendChild(addBtn);
 
@@ -3907,10 +3919,28 @@ const App = {
     document.getElementById('tagEditModal').hidden = false;
   },
 
-  buildTagEditRuleRow(rule, isNew) {
+  buildTagEditRuleRow(rule, templates, isNew) {
     const row = document.createElement('div');
     row.className = 'tag-edit-rule';
     if (rule.id) row.dataset.id = rule.id;
+
+    const templateSel = document.createElement('select');
+    templateSel.className = 'input tag-edit-rule__field';
+    const tmplList = templates && templates.length ? templates : [rule.template || 'Valve'];
+    for (const t of tmplList) {
+      const opt = document.createElement('option');
+      opt.value = t;
+      opt.textContent = t;
+      if (t === rule.template) opt.selected = true;
+      templateSel.appendChild(opt);
+    }
+    if (rule.template && !tmplList.includes(rule.template)) {
+      const opt = document.createElement('option');
+      opt.value = rule.template;
+      opt.textContent = rule.template;
+      opt.selected = true;
+      templateSel.appendChild(opt);
+    }
 
     const condSel = document.createElement('select');
     condSel.className = 'input tag-edit-rule__field';
@@ -3932,11 +3962,21 @@ const App = {
     patternInput.value = rule.pattern || '';
     patternInput.placeholder = 'Текст для проверки';
 
+    const emptySel = document.createElement('select');
+    emptySel.className = 'input tag-edit-rule__field';
+    [['true', 'Пустое допустимо'], ['false', 'Пустое недопустимо']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = l;
+      if ((rule.empty_allowed ? 'true' : 'false') === v) opt.selected = true;
+      emptySel.appendChild(opt);
+    });
+
     const actionSel = document.createElement('select');
     actionSel.className = 'input tag-edit-rule__field';
     for (const [val, label] of [
-      ['delete', 'Удалить'],
-      ['replace', 'Заменить на'],
+      ['delete', 'Очистить'],
+      ['replace', 'Заменить'],
     ]) {
       const opt = document.createElement('option');
       opt.value = val;
@@ -3949,17 +3989,39 @@ const App = {
     replacementInput.type = 'text';
     replacementInput.className = 'input tag-edit-rule__field';
     replacementInput.value = rule.replacement || '';
-    replacementInput.placeholder = 'Новый Tag';
+    replacementInput.placeholder = 'Найденный фрагмент';
 
-    const replacementWrap = this.labeledBlock('Заменить на', replacementInput);
+    const replacementWrap = this.labeledField('Заменить на', replacementInput);
     const syncActionUI = () => {
       const isReplace = actionSel.value === 'replace';
       replacementWrap.hidden = !isReplace;
       if (!isReplace) replacementInput.value = '';
-      else replacementInput.focus();
     };
     actionSel.addEventListener('change', syncActionUI);
     syncActionUI();
+
+    const checkProps = document.createElement('input');
+    checkProps.type = 'checkbox';
+    checkProps.checked = !!rule.check_properties;
+    const checkCmds = document.createElement('input');
+    checkCmds.type = 'checkbox';
+    checkCmds.checked = !!rule.check_commands;
+    const checkProt = document.createElement('input');
+    checkProt.type = 'checkbox';
+    checkProt.checked = !!rule.check_protections;
+    const nestedWrap = document.createElement('div');
+    nestedWrap.className = 'tag-edit-rule__nested';
+    [
+      [checkProps, 'Характеристики'],
+      [checkCmds, 'Команды'],
+      [checkProt, 'Защиты'],
+    ].forEach(([box, label]) => {
+      const lab = document.createElement('label');
+      lab.className = 'tag-edit-rule__check';
+      lab.appendChild(box);
+      lab.appendChild(document.createTextNode(label));
+      nestedWrap.appendChild(lab);
+    });
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
@@ -3970,23 +4032,41 @@ const App = {
       row.remove();
     });
 
-    row.appendChild(this.labeledBlock('Условие', condSel));
-    row.appendChild(this.labeledBlock('Текст', patternInput));
-    row.appendChild(this.labeledBlock('Действие', actionSel));
+    row.appendChild(this.labeledField('Тип объекта', templateSel));
+    row.appendChild(this.labeledField('Условие', condSel));
+    row.appendChild(this.labeledField('Текст', patternInput));
+    row.appendChild(this.labeledField('Пустое поле', emptySel));
+    row.appendChild(this.labeledField('Действие', actionSel));
     row.appendChild(replacementWrap);
+    const nestedField = document.createElement('div');
+    nestedField.className = 'tag-edit-rule__group tag-edit-rule__nested-group';
+    const nestedLbl = document.createElement('span');
+    nestedLbl.className = 'props-field__label';
+    nestedLbl.textContent = 'Пустой Tag в блоках';
+    nestedField.appendChild(nestedLbl);
+    nestedField.appendChild(nestedWrap);
+    row.appendChild(nestedField);
     row.appendChild(delBtn);
 
-    row._fields = { condSel, patternInput, actionSel, replacementInput };
+    row._fields = {
+      templateSel, condSel, patternInput, emptySel, actionSel, replacementInput,
+      checkProps, checkCmds, checkProt,
+    };
     return row;
   },
 
   collectTagEditRuleData(row) {
     const f = row._fields;
     return {
+      template: f.templateSel.value,
       text_condition: f.condSel.value,
       pattern: f.patternInput.value,
+      empty_allowed: f.emptySel.value === 'true',
       action: f.actionSel.value,
       replacement: f.actionSel.value === 'replace' ? f.replacementInput.value : '',
+      check_properties: f.checkProps.checked,
+      check_commands: f.checkCmds.checked,
+      check_protections: f.checkProt.checked,
     };
   },
 
@@ -3998,12 +4078,12 @@ const App = {
     }
     for (const row of rows) {
       const data = this.collectTagEditRuleData(row);
-      if (!data.pattern.trim()) {
-        alert('Укажите текст для проверки в каждом правиле');
+      if (!data.template) {
+        alert('Укажите тип объекта в каждом правиле');
         return false;
       }
-      if (data.action === 'replace' && !data.replacement.trim()) {
-        alert('Укажите текст замены для правил с действием «Заменить на»');
+      if (!data.pattern.trim()) {
+        alert('Укажите текст для проверки в каждом правиле');
         return false;
       }
     }
@@ -4031,9 +4111,9 @@ const App = {
     const rows = document.querySelectorAll('.tag-edit-rule');
     const solutionName = document.getElementById('solutionName').textContent || 'текущее решение';
     const deleteRules = [...rows].filter(r => r._fields?.actionSel?.value === 'delete').length;
-    let msg = `Применить ${rows.length} правил редактирования TAG к решению «${solutionName}»?\n\nTag объектов на всех схемах будет изменён.`;
+    let msg = `Применить ${rows.length} правил редактирования TAG к решению «${solutionName}»?\n\nМеняется только основной Tag объектов выбранного типа на всех схемах.`;
     if (deleteRules > 0) {
-      msg += `\n\nВнимание: ${deleteRules} правил полностью очищают Tag при совпадении.`;
+      msg += `\n\nВнимание: ${deleteRules} правил полностью очищают основной Tag при совпадении.`;
     }
     msg += '\n\nПродолжить?';
     if (!confirm(msg)) return;
@@ -4053,8 +4133,17 @@ const App = {
     };
 
     this.tagEditApplying = true;
+    document.body.style.cursor = 'wait';
     const tagBtn = document.getElementById('btnTagEditSettings');
     tagBtn.disabled = true;
+    const extraBusy = [
+      'btnSave', 'btnExport', 'btnExportObjects', 'btnDuplicateSettings',
+      'btnComplianceSettings', 'btnDisplaySettings', 'btnHelp',
+    ];
+    extraBusy.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = true;
+    });
 
     try {
       this.hideTagEditSettings();
@@ -4098,7 +4187,12 @@ const App = {
     } finally {
       overlay.hidden = true;
       this.tagEditApplying = false;
+      document.body.style.cursor = '';
       if (this.solutionId) tagBtn.disabled = false;
+      extraBusy.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = false;
+      });
     }
   },
 
@@ -4107,6 +4201,7 @@ const App = {
   },
 
   async showExportObjects() {
+    if (this.tagEditApplying) return;
     const openBtn = document.getElementById('btnExportObjects');
     const openBtnText = openBtn?.textContent || '';
     if (openBtn) {
@@ -4520,6 +4615,7 @@ const App = {
   },
 
   showHelp() {
+    if (this.tagEditApplying) return;
     const body = document.getElementById('helpBody');
     body.innerHTML = `
       <section class="help-section">
@@ -4542,7 +4638,7 @@ const App = {
           <li><strong>👤 Выбрать…</strong> — выбор или создание пользователя (слева вверху). Настройки и решения привязаны к пользователю. Кнопка всегда доступна; без пользователя текст «Выбрать…», после выбора — укороченный логин.</li>
           <li><strong>⚙ Отображение</strong> — символы, подписи, смещение и видимость типов объектов на схеме.</li>
           <li><strong>⚠ Проверки</strong> — порядок полей: Тип объекта → Область → Параметр → Атрибут параметра → Условие текста → Текст → Пустое поле → Индикация → Цвет → Период. Область задаёт список Параметра (Основные, Характеристики, Команды, Защиты); при нарушении объект подсвечивается на схеме. Условие текста: «Должен / Не должен содержать» — по вхождению; «Строгое соответствие» — значение должно быть равно тексту; «Не должен совпадать строго» — нарушение, если значение ровно равно тексту (подсветка объекта). Списки параметров берутся из каталога решения и на повторных открытиях загружаются быстро. Если список не загрузился, нажмите <strong>⟳ Повторить</strong> рядом с полем «Параметр». Надпись «Нет вариантов» означает, что для выбранного типа объекта и области список пуст.</li>
-          <li><strong>🏷 Редактирование TAG</strong> — правила массового изменения Tag: условие (содержит / начинается / заканчивается), действие (очистить или заменить). «Применить» — подтверждение, затем сразу оверлей «Редактирование TAG…» с ходом обработки. Если были изменения, появляется «● Несохранено»; искать дубликаты можно сразу, без «Сохранить». Save нужен, чтобы записать правки в базу. На больших решениях дождитесь окончания оверлея. TAG edit и поиск дубликатов (обычный/фоновый) взаимно блокируются.</li>
+          <li><strong>🏷 Редактирование TAG</strong> — в каждом правиле: тип объекта, условие текста (содержит / начинается / заканчивается), текст, «Пустое допустимо / недопустимо», действие «Заменить» (только найденный фрагмент) или «Очистить». Можно отметить Характеристики / Команды / Защиты: если основной Tag пустой, «Пустое недопустимо» и в отмеченных блоках есть непустой Tag — в основной Tag пишется текст замены; если там тоже пусто, объект не трогается. Меняется только основной Tag. «Применить» — подтверждение, затем оверлей на весь экран до конца обработки; другие действия недоступны. Если были изменения, появляется «● Несохранено», объекты попадают в «Выгрузить объекты → Только изменённые». Save записывает правки в базу.</li>
           <li><strong>Выгрузить объекты</strong> — таблица CSV/JSON по выбранным полям; можно выгрузить только изменённые объекты и настроить порядок колонок. В параметрах можно включить колонку <strong>Template</strong> (тип объекта); select «Тип объекта» сверху — фильтр строк, его можно сочетать с «только изменённые» (AND). В строке Tag (или отдельно, если Tag снят) — фильтр: Все / Только непустые / Только пустые (по умолчанию — только непустые). Рядом с «Только изменённые объекты» — кнопка <strong>Обнуление данных по изменённым объектам</strong>: скрывает учтённые изменения из счётчика и фильтра «только изменённые», не удаляя правки в решении. Сохранение решения список и счётчик не сбрасывает — сброс только этой кнопкой.</li>
           <li><strong>Дубликаты</strong> — поиск одинаковых Tag по основным параметрам, характеристикам, командам и защитам. В таблице, на вкладке «Дубликаты» инспектора и в плавающей панели колонка Id — технологический Id объекта (как во вкладке «Основные»); если пусто — «—»; навигация по строке использует системный ключ графического объекта. В настройках: области поиска (Основные / Характеристики / Команды / Защиты — отмеченные участвуют в поиске) и исключения Tag (несколько условий через ИЛИ; подходящие Tag не участвуют в поиске). Типы исключения: «Содержит символ» — символ встречается в Tag; «Содержит текст» — фрагмент встречается в Tag; «Содержит один символ» — Tag целиком равен одному заданному символу (например «.» исключает только Tag «.», а не «тест.это.тест»); «Первый символ» — первый символ Tag равен заданному. «Начать поиск» — полный принудительный проход с оверлеем; на больших решениях может занять заметное время — дождитесь окончания по оверлею. «Поиск в фоне» — щадящий фоновый сканер без оверлея: сначала весь проект, затем только изменения; найденные дубликаты появляются в таблице по мере сканирования. Обычный и фоновый поиск взаимно блокируются. Смена областей поиска и исключений Tag сохраняется при запуске поиска или включении фона и требует полного пересчёта. После поиска блок «Выгрузка дубликатов Tag»: формат CSV (разделитель «;» и строка заголовка), TXT (колонки через табуляцию) или XML (корень duplicates, строки row, выбранные колонки — теги); отметьте колонки отчёта (Tag, Id, Имя, Тип, Область, Параметр, Схема; по умолчанию все включены) и нажмите <strong>Выгрузить</strong> — скачивается файл UTF-8 со всеми строками текущей таблицы. Без результатов поиска кнопка недоступна. Результаты поиска сохраняются и после обновления страницы снова видны на схемах и в обозревателе; полный пересчёт — только повторным запуском поиска (или фоном, если включён).</li>
           <li><strong>Сохранить</strong> — записать правки из буфера сессии в решение. Открытая схема после успеха остаётся открытой (перечитывается с сервера). Во время сохранения интерфейс блокируется оверлеем с процентом и оценкой оставшегося времени; успех показывается на оверлее без отдельного окна, при ошибке правки остаются несохранёнными.</li>
@@ -4561,7 +4657,7 @@ const App = {
       </section>
       <section class="help-section">
         <h4>Изменения и выгрузка</h4>
-        <p>После правки объекта на схеме появляется метка <strong>● Несохранено</strong>; она держится при смене схем, пока есть незаписанные правки, и снимается только после успешного <strong>Сохранить</strong>. Правки живут в буфере сессии и не пропадают при переключении схем. Нажмите <strong>Сохранить</strong>: правки запишутся в решение, открытая схема останется открытой. Пока идёт сохранение, экран заблокирован, виден процент и оставшееся время. При ошибке сохранения метка остаётся. Массовое «Редактирование TAG» ставит «● Несохранено» только если были изменения; дубликаты можно запускать сразу после оверлея. Для выгрузки только изменённых полей используйте <strong>Выгрузить объекты → Только изменённые</strong> — в файл попадут объекты с правками после сохранения в базу (за вычетом обнулённого счётчика); фильтр «Тип объекта» работает вместе с «только изменённые». <strong>Сохранить</strong> не сбрасывает список и счётчик изменённых объектов; сброс только кнопкой <strong>Обнуление данных по изменённым объектам</strong>. Фильтр Tag «Только непустые» исключает объекты с очищенным Tag после «Редактирование TAG» → очистить.</p>
+        <p>После правки объекта на схеме появляется метка <strong>● Несохранено</strong>; она держится при смене схем, пока правки не записаны <strong>Сохранить</strong>. Пока идёт «Редактирование TAG», экран заблокирован оверлеем. Массовое «Редактирование TAG» ставит «● Несохранено» только если были изменения; такие объекты видны в <strong>Выгрузить объекты → Только изменённые</strong>. <strong>Сохранить</strong> не сбрасывает список изменённых; сброс — кнопкой обнуления. Фильтр Tag «Только непустые» исключает объекты с очищенным Tag.</p>
       </section>`;
     document.getElementById('helpModal').hidden = false;
   },
