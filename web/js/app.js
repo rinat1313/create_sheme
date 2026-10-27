@@ -3874,7 +3874,39 @@ const App = {
       ? (await API.getSolutionTemplates(this.solutionId)).map(t => t.template)
       : (await API.getDisplaySettings()).map(s => s.template);
     const body = document.getElementById('tagEditSettingsBody');
-    body.innerHTML = '<p class="modal-hint">Правила идут сверху вниз и меняют только основной Tag объекта выбранного типа на всех схемах. Если основной Tag пустой и «Пустое недопустимо», при непустом Tag в отмеченных блоках (Характеристики / Команды / Защиты) в основной Tag записывается текст замены. Сами вложенные Tag не меняются.</p>';
+    body.innerHTML = '<p class="modal-hint">Правила идут сверху вниз. Сначала выбираете, что проверять (как в «Проверках»), затем условие. Если условие «Пустое поле», текст не нужен. Галки блоков — дополнительный отбор: объект подходит, только если во всех отмеченных блоках есть непустой Tag. Ниже — одно или несколько действий: какое поле менять и что делать. Экспорт сохраняет правила в читаемый JSON, его можно править и загрузить снова.</p>';
+    const fileRow = document.createElement('div');
+    fileRow.className = 'tag-edit-file-actions';
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.className = 'btn btn--ghost';
+    exportBtn.textContent = 'Экспорт правил';
+    exportBtn.addEventListener('click', () => this.exportTagEditRulesFile());
+    const importBtn = document.createElement('button');
+    importBtn.type = 'button';
+    importBtn.className = 'btn btn--ghost';
+    importBtn.textContent = 'Импорт правил';
+    const importInput = document.createElement('input');
+    importInput.type = 'file';
+    importInput.accept = 'application/json,.json';
+    importInput.hidden = true;
+    importBtn.addEventListener('click', () => importInput.click());
+    importInput.addEventListener('change', async () => {
+      const file = importInput.files && importInput.files[0];
+      importInput.value = '';
+      if (!file) return;
+      try {
+        await this.importTagEditRulesFile(file);
+        this.hideTagEditSettings();
+        await this.showTagEditSettings();
+      } catch (err) {
+        alert(err.message || 'Не удалось загрузить правила');
+      }
+    });
+    fileRow.appendChild(exportBtn);
+    fileRow.appendChild(importBtn);
+    fileRow.appendChild(importInput);
+    body.appendChild(fileRow);
 
     const list = document.createElement('div');
     list.className = 'tag-edit-rules-list';
@@ -3891,14 +3923,15 @@ const App = {
     addBtn.addEventListener('click', () => {
       list.appendChild(this.buildTagEditRuleRow({
         template: templates[0] || 'Valve',
+        parameter_scope: 'object',
+        parameter: 'Tag',
+        value_source: 'field',
         text_condition: 'contains',
         pattern: '',
-        action: 'delete',
-        replacement: '',
-        empty_allowed: true,
         check_properties: false,
         check_commands: false,
         check_protections: false,
+        actions: [{ parameter_scope: 'object', parameter: 'Tag', value_source: 'field', action: 'delete', replacement: '', replace_mode: 'found' }],
       }, templates, true));
     });
     body.appendChild(addBtn);
@@ -3920,10 +3953,209 @@ const App = {
     document.getElementById('tagEditModal').hidden = false;
   },
 
+  bindTagEditScopeParams(templateSel, scopeSel, paramSel, sourceSel, stash) {
+    const OBJECT_SCALAR_PARAMS = new Set(['Tag', 'Name', 'Description', 'Id', 'ExternalCode']);
+    const tagSourceAllowed = (param) => {
+      if (scopeSel.value === 'property' || scopeSel.value === 'command' || scopeSel.value === 'protection') return true;
+      return !OBJECT_SCALAR_PARAMS.has(param) || param === 'Tag';
+    };
+    const syncSourceOptions = () => {
+      const paramReady = !paramSel.disabled && !!paramSel.value;
+      sourceSel.disabled = !paramReady;
+      const tagOpt = sourceSel.querySelector('option[value="tag"]');
+      if (!tagOpt) return;
+      if (scopeSel.value === 'command' || scopeSel.value === 'protection') {
+        tagOpt.hidden = false;
+        tagOpt.disabled = false;
+        return;
+      }
+      const allowed = tagSourceAllowed(paramSel.value);
+      tagOpt.hidden = !allowed;
+      tagOpt.disabled = !allowed;
+      if (!allowed && sourceSel.value === 'tag') sourceSel.value = 'field';
+    };
+    const setPlaceholder = (text) => {
+      paramSel.innerHTML = '';
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = text;
+      opt.disabled = true;
+      opt.selected = true;
+      paramSel.appendChild(opt);
+      paramSel.disabled = true;
+      syncSourceOptions();
+    };
+    const fill = (items, current) => {
+      if (!items || !items.length) {
+        setPlaceholder('Нет вариантов');
+        return;
+      }
+      paramSel.innerHTML = '';
+      for (const item of items) {
+        const opt = document.createElement('option');
+        opt.value = item;
+        opt.textContent = item;
+        if (item === current) opt.selected = true;
+        paramSel.appendChild(opt);
+      }
+      paramSel.disabled = false;
+      if (!paramSel.value) paramSel.value = items[0];
+      syncSourceOptions();
+    };
+    const currentForScope = (scope) => {
+      if (scope === 'command' || scope === 'protection') return paramSel.value || stash.entity_template || '';
+      return paramSel.value || stash.parameter || 'Tag';
+    };
+    const load = async () => {
+      const scope = scopeSel.value;
+      const tpl = templateSel.value;
+      const current = currentForScope(scope);
+      if (!this.solutionId || !tpl) {
+        fill(scope === 'object' ? ['Tag', 'Name', 'Description', 'Id', 'ExternalCode'] : [], current);
+        return;
+      }
+      try {
+        const items = await this.loadComplianceParameters(scope, tpl, false);
+        fill(items, current);
+      } catch (_) {
+        setPlaceholder('Ошибка загрузки');
+      }
+    };
+    templateSel.addEventListener('change', () => load());
+    scopeSel.addEventListener('change', () => load());
+    paramSel.addEventListener('change', () => syncSourceOptions());
+    load();
+    return () => this.collectTagEditTarget(scopeSel, paramSel, sourceSel, stash);
+  },
+
+  collectTagEditTarget(scopeSel, paramSel, sourceSel, stash) {
+    const scope = scopeSel.value;
+    const isEntity = scope === 'command' || scope === 'protection';
+    let entityTemplate = '';
+    let parameter = paramSel.value;
+    let valueSource = sourceSel.value;
+    if (isEntity) {
+      entityTemplate = paramSel.value;
+      const entityChanged = entityTemplate !== (stash.entity_template || '');
+      if (entityChanged || !stash.parameter) {
+        parameter = valueSource === 'tag' ? 'Tag' : 'Name';
+      } else {
+        parameter = stash.parameter;
+      }
+    }
+    stash.entity_template = entityTemplate;
+    stash.parameter = parameter;
+    stash.value_source = valueSource;
+    return { parameter_scope: scope, entity_template: entityTemplate, parameter, value_source: valueSource };
+  },
+
+  createTagEditScopeSelect(value) {
+    const sel = document.createElement('select');
+    sel.className = 'input tag-edit-rule__field';
+    [['object', 'Основные характеристики'], ['property', 'Характеристики'], ['command', 'Команды'], ['protection', 'Защиты']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = l;
+      if ((value || 'object') === v) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    return sel;
+  },
+
+  createTagEditSourceSelect(value) {
+    const sel = document.createElement('select');
+    sel.className = 'input tag-edit-rule__field';
+    [['field', 'Значение'], ['tag', 'Tag параметра']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = l;
+      if ((value || 'field') === v) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    return sel;
+  },
+
+  buildTagEditActionRow(action) {
+    const row = document.createElement('div');
+    row.className = 'tag-edit-action';
+    const stash = {
+      entity_template: action.entity_template || '',
+      parameter: action.parameter || 'Tag',
+      value_source: action.value_source || 'field',
+    };
+    const scopeSel = this.createTagEditScopeSelect(action.parameter_scope);
+    const paramSel = document.createElement('select');
+    paramSel.className = 'input tag-edit-rule__field';
+    const sourceSel = this.createTagEditSourceSelect(action.value_source);
+    const actionSel = document.createElement('select');
+    actionSel.className = 'input tag-edit-rule__field';
+    [['delete', 'Очистить'], ['replace', 'Заменить']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = l;
+      if ((action.action || 'delete') === v) opt.selected = true;
+      actionSel.appendChild(opt);
+    });
+    const modeSel = document.createElement('select');
+    modeSel.className = 'input tag-edit-rule__field';
+    [['found', 'Только найденное'], ['whole', 'Всю строку'], ['first', 'Первое совпадение'], ['all', 'Все совпадения'], ['last', 'Последнее совпадение']].forEach(([v, l]) => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = l;
+      if ((action.replace_mode || 'found') === v) opt.selected = true;
+      modeSel.appendChild(opt);
+    });
+    const replacementInput = document.createElement('input');
+    replacementInput.type = 'text';
+    replacementInput.className = 'input tag-edit-rule__field';
+    replacementInput.value = action.replacement || '';
+    replacementInput.placeholder = 'Заменить на';
+    const replacementWrap = this.labeledField('Заменить на', replacementInput);
+    const modeWrap = this.labeledField('Как заменить', modeSel);
+    const syncReplace = () => {
+      const show = actionSel.value === 'replace';
+      replacementWrap.hidden = !show;
+      modeWrap.hidden = !show;
+      if (!show) replacementInput.value = '';
+    };
+    actionSel.addEventListener('change', syncReplace);
+    syncReplace();
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn--ghost';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', () => {
+      const list = row.parentElement;
+      if (list && list.querySelectorAll('.tag-edit-action').length <= 1) {
+        alert('Нужно хотя бы одно действие');
+        return;
+      }
+      row.remove();
+    });
+    row.appendChild(this.labeledField('Что меняем', scopeSel));
+    row.appendChild(this.labeledField('Параметр', paramSel));
+    row.appendChild(this.labeledField('Атрибут', sourceSel));
+    row.appendChild(this.labeledField('Действие', actionSel));
+    row.appendChild(modeWrap);
+    row.appendChild(replacementWrap);
+    row.appendChild(delBtn);
+    row._collect = null;
+    row._bind = (templateSel) => {
+      row._collect = this.bindTagEditScopeParams(templateSel, scopeSel, paramSel, sourceSel, stash);
+    };
+    row._fields = { actionSel, replacementInput, modeSel };
+    return row;
+  },
+
   buildTagEditRuleRow(rule, templates, isNew) {
     const row = document.createElement('div');
     row.className = 'tag-edit-rule';
     if (rule.id) row.dataset.id = rule.id;
+    const checkStash = {
+      entity_template: rule.entity_template || '',
+      parameter: rule.parameter || 'Tag',
+      value_source: rule.value_source || 'field',
+    };
 
     const templateSel = document.createElement('select');
     templateSel.className = 'input tag-edit-rule__field';
@@ -3943,12 +4175,18 @@ const App = {
       templateSel.appendChild(opt);
     }
 
+    const scopeSel = this.createTagEditScopeSelect(rule.parameter_scope);
+    const paramSel = document.createElement('select');
+    paramSel.className = 'input tag-edit-rule__field';
+    const sourceSel = this.createTagEditSourceSelect(rule.value_source);
+
     const condSel = document.createElement('select');
     condSel.className = 'input tag-edit-rule__field';
     for (const [val, label] of [
       ['contains', 'Содержит текст'],
       ['starts_with', 'Текст начинается'],
       ['ends_with', 'Текст заканчивается'],
+      ['empty', 'Пустое поле'],
     ]) {
       const opt = document.createElement('option');
       opt.value = val;
@@ -3962,44 +4200,14 @@ const App = {
     patternInput.className = 'input tag-edit-rule__field';
     patternInput.value = rule.pattern || '';
     patternInput.placeholder = 'Текст для проверки';
-
-    const emptySel = document.createElement('select');
-    emptySel.className = 'input tag-edit-rule__field';
-    [['true', 'Пустое допустимо'], ['false', 'Пустое недопустимо']].forEach(([v, l]) => {
-      const opt = document.createElement('option');
-      opt.value = v;
-      opt.textContent = l;
-      if ((rule.empty_allowed ? 'true' : 'false') === v) opt.selected = true;
-      emptySel.appendChild(opt);
-    });
-
-    const actionSel = document.createElement('select');
-    actionSel.className = 'input tag-edit-rule__field';
-    for (const [val, label] of [
-      ['delete', 'Очистить'],
-      ['replace', 'Заменить'],
-    ]) {
-      const opt = document.createElement('option');
-      opt.value = val;
-      opt.textContent = label;
-      if (val === rule.action) opt.selected = true;
-      actionSel.appendChild(opt);
-    }
-
-    const replacementInput = document.createElement('input');
-    replacementInput.type = 'text';
-    replacementInput.className = 'input tag-edit-rule__field';
-    replacementInput.value = rule.replacement || '';
-    replacementInput.placeholder = 'Найденный фрагмент';
-
-    const replacementWrap = this.labeledField('Заменить на', replacementInput);
-    const syncActionUI = () => {
-      const isReplace = actionSel.value === 'replace';
-      replacementWrap.hidden = !isReplace;
-      if (!isReplace) replacementInput.value = '';
+    const patternWrap = this.labeledField('Текст', patternInput);
+    const syncPattern = () => {
+      const empty = condSel.value === 'empty';
+      patternWrap.hidden = empty;
+      if (empty) patternInput.value = '';
     };
-    actionSel.addEventListener('change', syncActionUI);
-    syncActionUI();
+    condSel.addEventListener('change', syncPattern);
+    syncPattern();
 
     const checkProps = document.createElement('input');
     checkProps.type = 'checkbox';
@@ -4024,6 +4232,48 @@ const App = {
       nestedWrap.appendChild(lab);
     });
 
+    const actionsWrap = document.createElement('div');
+    actionsWrap.className = 'tag-edit-rule__actions';
+    const actionsTitle = document.createElement('span');
+    actionsTitle.className = 'props-field__label';
+    actionsTitle.textContent = 'Действия';
+    actionsWrap.appendChild(actionsTitle);
+    const actionsList = document.createElement('div');
+    actionsList.className = 'tag-edit-actions-list';
+    const seedActions = (rule.actions && rule.actions.length)
+      ? rule.actions
+      : [{
+          parameter_scope: 'object',
+          parameter: rule.parameter || 'Tag',
+          value_source: 'field',
+          action: rule.action || 'delete',
+          replacement: rule.replacement || '',
+          replace_mode: 'found',
+        }];
+    seedActions.forEach((act) => {
+      const actionRow = this.buildTagEditActionRow(act);
+      actionRow._bind(templateSel);
+      actionsList.appendChild(actionRow);
+    });
+    const addActionBtn = document.createElement('button');
+    addActionBtn.type = 'button';
+    addActionBtn.className = 'btn btn--ghost';
+    addActionBtn.textContent = '+ Добавить действие';
+    addActionBtn.addEventListener('click', () => {
+      const actionRow = this.buildTagEditActionRow({
+        parameter_scope: 'object',
+        parameter: 'Tag',
+        value_source: 'field',
+        action: 'delete',
+        replacement: '',
+        replace_mode: 'found',
+      });
+      actionRow._bind(templateSel);
+      actionsList.appendChild(actionRow);
+    });
+    actionsWrap.appendChild(actionsList);
+    actionsWrap.appendChild(addActionBtn);
+
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'btn btn--ghost tag-edit-rule__delete';
@@ -4034,40 +4284,53 @@ const App = {
     });
 
     row.appendChild(this.labeledField('Тип объекта', templateSel));
+    row.appendChild(this.labeledField('Что проверяем', scopeSel));
+    row.appendChild(this.labeledField('Параметр', paramSel));
+    row.appendChild(this.labeledField('Атрибут параметра', sourceSel));
     row.appendChild(this.labeledField('Условие', condSel));
-    row.appendChild(this.labeledField('Текст', patternInput));
-    row.appendChild(this.labeledField('Пустое поле', emptySel));
-    row.appendChild(this.labeledField('Действие', actionSel));
-    row.appendChild(replacementWrap);
+    row.appendChild(patternWrap);
     const nestedField = document.createElement('div');
     nestedField.className = 'tag-edit-rule__group tag-edit-rule__nested-group';
     const nestedLbl = document.createElement('span');
     nestedLbl.className = 'props-field__label';
-    nestedLbl.textContent = 'Пустой Tag в блоках';
+    nestedLbl.textContent = 'Непустой Tag в блоках';
     nestedField.appendChild(nestedLbl);
     nestedField.appendChild(nestedWrap);
     row.appendChild(nestedField);
+    row.appendChild(actionsWrap);
     row.appendChild(delBtn);
 
+    const collectCheck = this.bindTagEditScopeParams(templateSel, scopeSel, paramSel, sourceSel, checkStash);
     row._fields = {
-      templateSel, condSel, patternInput, emptySel, actionSel, replacementInput,
-      checkProps, checkCmds, checkProt,
+      templateSel, condSel, patternInput, checkProps, checkCmds, checkProt,
+      collectCheck, actionsList,
     };
     return row;
   },
 
   collectTagEditRuleData(row) {
     const f = row._fields;
+    const check = f.collectCheck();
+    const actions = [];
+    f.actionsList.querySelectorAll('.tag-edit-action').forEach((actionRow) => {
+      const target = actionRow._collect ? actionRow._collect() : {};
+      const af = actionRow._fields;
+      actions.push({
+        ...target,
+        action: af.actionSel.value,
+        replacement: af.actionSel.value === 'replace' ? af.replacementInput.value : '',
+        replace_mode: af.modeSel.value,
+      });
+    });
     return {
       template: f.templateSel.value,
+      ...check,
       text_condition: f.condSel.value,
-      pattern: f.patternInput.value,
-      empty_allowed: f.emptySel.value === 'true',
-      action: f.actionSel.value,
-      replacement: f.actionSel.value === 'replace' ? f.replacementInput.value : '',
+      pattern: f.condSel.value === 'empty' ? '' : f.patternInput.value,
       check_properties: f.checkProps.checked,
       check_commands: f.checkCmds.checked,
       check_protections: f.checkProt.checked,
+      actions,
     };
   },
 
@@ -4083,12 +4346,32 @@ const App = {
         alert('Укажите тип объекта в каждом правиле');
         return false;
       }
-      if (!data.pattern.trim()) {
-        alert('Укажите текст для проверки в каждом правиле');
+      if (data.text_condition !== 'empty' && !String(data.pattern || '').trim()) {
+        alert('Укажите текст для проверки или выберите «Пустое поле»');
+        return false;
+      }
+      if (!data.actions || !data.actions.length) {
+        alert('В каждом правиле нужно хотя бы одно действие');
         return false;
       }
     }
     return true;
+  },
+
+  async exportTagEditRulesFile() {
+    const text = await API.exportTagEditRules();
+    const blob = new Blob([text], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tag-edit-rules.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  async importTagEditRulesFile(file) {
+    const text = await file.text();
+    await API.importTagEditRules(text);
   },
 
   async saveTagEditRules() {
@@ -4111,10 +4394,10 @@ const App = {
 
     const rows = document.querySelectorAll('.tag-edit-rule');
     const solutionName = document.getElementById('solutionName').textContent || 'текущее решение';
-    const deleteRules = [...rows].filter(r => r._fields?.actionSel?.value === 'delete').length;
-    let msg = `Применить ${rows.length} правил редактирования TAG к решению «${solutionName}»?\n\nМеняется только основной Tag объектов выбранного типа на всех схемах.`;
+    const deleteRules = [...rows].filter(r => this.collectTagEditRuleData(r).actions?.some(a => a.action === 'delete')).length;
+    let msg = `Применить ${rows.length} правил редактирования TAG к решению «${solutionName}»?\n\nПо условию отбираются объекты выбранного типа, затем выполняются все действия правила (поля объекта, характеристики, команды, защиты).`;
     if (deleteRules > 0) {
-      msg += `\n\nВнимание: ${deleteRules} правил полностью очищают основной Tag при совпадении.`;
+      msg += `\n\nВнимание: есть действия «Очистить» — выбранное поле станет пустым.`;
     }
     msg += '\n\nПродолжить?';
     if (!confirm(msg)) return;
@@ -4639,7 +4922,7 @@ const App = {
           <li><strong>👤 Выбрать…</strong> — выбор или создание пользователя (слева вверху). Настройки и решения привязаны к пользователю. Кнопка всегда доступна; без пользователя текст «Выбрать…», после выбора — укороченный логин.</li>
           <li><strong>⚙ Отображение</strong> — символы, подписи, смещение и видимость типов объектов на схеме.</li>
           <li><strong>⚠ Проверки</strong> — порядок полей: Тип объекта → Область → Параметр → Атрибут параметра → Условие текста → Текст → Пустое поле → Индикация → Цвет → Период. Область задаёт список Параметра (Основные, Характеристики, Команды, Защиты); при нарушении объект подсвечивается на схеме. Условие текста: «Должен / Не должен содержать» — по вхождению; «Строгое соответствие» — значение должно быть равно тексту; «Не должен совпадать строго» — нарушение, если значение ровно равно тексту (подсветка объекта). Списки параметров берутся из каталога решения и на повторных открытиях загружаются быстро. Если список не загрузился, нажмите <strong>⟳ Повторить</strong> рядом с полем «Параметр». Надпись «Нет вариантов» означает, что для выбранного типа объекта и области список пуст.</li>
-          <li><strong>🏷 Редактирование TAG</strong> — правила сверху вниз; меняется только основной Tag выбранного типа на всех схемах. В правиле: тип объекта, условие (содержит / начинается / заканчивается), текст, «Пустое поле» («Пустое допустимо» / «Пустое недопустимо»), действие «Заменить» (только найденный фрагмент; «Заменить на») или «Очистить». «Пустой Tag в блоках»: Характеристики / Команды / Защиты — при пустом основном Tag, «Пустое недопустимо», действии «Заменить» и непустом Tag в отмеченном блоке в основной Tag пишется «Заменить на»; если везде пусто — объект не трогается. «Применить» — подтверждение, затем оверлей на весь экран до конца; другие действия недоступны. При изменениях — «● Несохранено»; объекты в <strong>Выгрузить объекты</strong> → «Только изменённые объекты». <strong>Сохранить</strong> записывает правки в решение.</li>
+          <li><strong>🏷 Редактирование TAG</strong> — правила сверху вниз. После типа объекта выбираете, что проверять (как в «Проверках»: основные характеристики, характеристики, команды, защиты и конкретное поле). Условие: содержит / начинается / заканчивается / «Пустое поле» — тогда «Текст» скрыт. Галки «Непустой Tag в блоках»: объект в выборке, только если во всех отмеченных блоках есть непустой Tag. Затем одно или несколько действий: какое поле менять, «Очистить» (без «Заменить на») или «Заменить» («Заменить на» и способ: найденное / вся строка / первое / все / последнее совпадение). Экспорт и импорт — читаемый JSON правил. «Применить» держит оверлей до конца. Изменения — «● Несохранено» и «Выгрузить объекты → Только изменённые».</li>
           <li><strong>Выгрузить объекты</strong> — таблица CSV/JSON по выбранным полям; можно выгрузить только изменённые объекты и настроить порядок колонок. В параметрах можно включить колонку <strong>Template</strong> (тип объекта); select «Тип объекта» сверху — фильтр строк, его можно сочетать с «только изменённые» (AND). В строке Tag (или отдельно, если Tag снят) — фильтр: Все / Только непустые / Только пустые (по умолчанию — только непустые). Рядом с «Только изменённые объекты» — кнопка <strong>Обнуление данных по изменённым объектам</strong>: скрывает учтённые изменения из счётчика и фильтра «только изменённые», не удаляя правки в решении. Сохранение решения список и счётчик не сбрасывает — сброс только этой кнопкой.</li>
           <li><strong>Дубликаты</strong> — поиск одинаковых Tag по основным параметрам, характеристикам, командам и защитам. В таблице, на вкладке «Дубликаты» инспектора и в плавающей панели колонка Id — технологический Id объекта (как во вкладке «Основные»); если пусто — «—»; навигация по строке использует системный ключ графического объекта. В настройках: области поиска (Основные / Характеристики / Команды / Защиты — отмеченные участвуют в поиске) и исключения Tag (несколько условий через ИЛИ; подходящие Tag не участвуют в поиске). Типы исключения: «Содержит символ» — символ встречается в Tag; «Содержит текст» — фрагмент встречается в Tag; «Содержит один символ» — Tag целиком равен одному заданному символу (например «.» исключает только Tag «.», а не «тест.это.тест»); «Первый символ» — первый символ Tag равен заданному. «Начать поиск» — полный принудительный проход с оверлеем; на больших решениях может занять заметное время — дождитесь окончания по оверлею. «Поиск в фоне» — щадящий фоновый сканер без оверлея: сначала весь проект, затем только изменения; найденные дубликаты появляются в таблице по мере сканирования. Обычный и фоновый поиск взаимно блокируются. Смена областей поиска и исключений Tag сохраняется при запуске поиска или включении фона и требует полного пересчёта. После поиска блок «Выгрузка дубликатов Tag»: формат CSV (разделитель «;» и строка заголовка), TXT (колонки через табуляцию) или XML (корень duplicates, строки row, выбранные колонки — теги); отметьте колонки отчёта (Tag, Id, Имя, Тип, Область, Параметр, Схема; по умолчанию все включены) и нажмите <strong>Выгрузить</strong> — скачивается файл UTF-8 со всеми строками текущей таблицы. Без результатов поиска кнопка недоступна. Результаты поиска сохраняются и после обновления страницы снова видны на схемах и в обозревателе; полный пересчёт — только повторным запуском поиска (или фоном, если включён).</li>
           <li><strong>Сохранить</strong> — записать правки из буфера сессии в решение. Открытая схема после успеха остаётся открытой (перечитывается с сервера). Во время сохранения интерфейс блокируется оверлеем с процентом и оценкой оставшегося времени; успех показывается на оверлее без отдельного окна, при ошибке правки остаются несохранёнными.</li>

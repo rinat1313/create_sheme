@@ -135,6 +135,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	migration025, err := os.ReadFile("migrations/025_tag_edit_rule_check_actions.sql")
+	if err != nil {
+		slog.Error("read migration failed", "file", "migrations/025_tag_edit_rule_check_actions.sql", "err", err)
+		os.Exit(1)
+	}
+	if err := store.Migrate(ctx, string(migration025)); err != nil {
+		slog.Error("migrate failed", "file", "migrations/025_tag_edit_rule_check_actions.sql", "err", err)
+		os.Exit(1)
+	}
+
 	if err := store.EnsureDefaultUser(ctx); err != nil {
 		slog.Error("ensure default user failed", "err", err)
 		os.Exit(1)

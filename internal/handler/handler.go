@@ -1023,7 +1023,7 @@ func (a *API) handleTagEditRules(w http.ResponseWriter, r *http.Request) {
 		}
 		rule, err := a.svc.CreateTagEditRule(r.Context(), input)
 		if err != nil {
-			if errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) {
+			if errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) || errors.Is(err, service.ErrTagEditNoActions) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}
@@ -1038,8 +1038,46 @@ func (a *API) handleTagEditRules(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleTagEditRuleItem(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/tag-edit-rules/")
+	idStr = strings.Trim(idStr, "/")
 	if idStr == "" {
 		http.NotFound(w, r)
+		return
+	}
+	if idStr == "export" {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		raw, err := a.svc.ExportTagEditRules(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", `attachment; filename="tag-edit-rules.json"`)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(raw)
+		return
+	}
+	if idStr == "import" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		raw, err := io.ReadAll(io.LimitReader(r.Body, service.TagEditImportReadLimit))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := a.svc.ImportTagEditRules(r.Context(), raw); err != nil {
+			if errors.Is(err, service.ErrTagEditInvalidImport) || errors.Is(err, service.ErrTagEditImportTooLarge) || errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) || errors.Is(err, service.ErrTagEditNoActions) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, map[string]string{"status": "ok"})
 		return
 	}
 	id, err := uuid.Parse(idStr)
@@ -1056,7 +1094,7 @@ func (a *API) handleTagEditRuleItem(w http.ResponseWriter, r *http.Request) {
 		}
 		input.ID = id.String()
 		if err := a.svc.UpdateTagEditRule(r.Context(), input); err != nil {
-			if errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) {
+			if errors.Is(err, service.ErrTagEditEmptyPattern) || errors.Is(err, service.ErrTagEditEmptyTemplate) || errors.Is(err, service.ErrTagEditNoActions) {
 				writeError(w, http.StatusBadRequest, err.Error())
 				return
 			}

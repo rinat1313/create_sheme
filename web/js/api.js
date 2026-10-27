@@ -401,6 +401,25 @@ const API = {
     return r.json();
   },
 
+  async exportTagEditRules() {
+    const r = await apiFetch('/api/v1/tag-edit-rules/export');
+    if (!r.ok) throw new Error('export failed');
+    return r.text();
+  },
+
+  async importTagEditRules(text) {
+    const r = await apiFetch('/api/v1/tag-edit-rules/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: text,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: 'import failed' }));
+      throw new Error(err.error || 'import failed');
+    }
+    return r.json();
+  },
+
   async deleteTagEditRule(id) {
     const r = await apiFetch(`/api/v1/tag-edit-rules/${id}`, { method: 'DELETE' });
     if (!r.ok) {

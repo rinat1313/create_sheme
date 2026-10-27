@@ -151,10 +151,12 @@ func (s *Store) SeedUserSettingsFromDefault(ctx context.Context, newUserID uuid.
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO tag_edit_rules (
 			id, user_id, text_condition, pattern, action, replacement,
-			template, empty_allowed, check_properties, check_commands, check_protections,
+			template, parameter_scope, entity_template, parameter, value_source, actions,
+			empty_allowed, check_properties, check_commands, check_protections,
 			sort_order)
 		SELECT gen_random_uuid(), $1, text_condition, pattern, action, replacement,
-		       template, empty_allowed, check_properties, check_commands, check_protections,
+		       template, parameter_scope, entity_template, parameter, value_source, actions,
+		       empty_allowed, check_properties, check_commands, check_protections,
 		       sort_order
 		FROM tag_edit_rules WHERE user_id = $2`, newUserID, DefaultUserID)
 	return err

@@ -21,7 +21,14 @@ var (
 	ErrTagEditNoRules        = errors.New("no tag edit rules configured")
 	ErrTagEditEmptyPattern   = errors.New("pattern must not be empty")
 	ErrTagEditEmptyTemplate  = errors.New("object type must not be empty")
+	ErrTagEditNoActions      = errors.New("at least one action is required")
+	ErrTagEditInvalidImport  = errors.New("invalid tag edit rules file")
+	ErrTagEditImportTooLarge = errors.New("tag edit rules file is too large")
 )
+
+const tagEditImportMaxBytes = 512 * 1024
+
+const TagEditImportReadLimit = tagEditImportMaxBytes + 1
 
 var tagEditJobLocks sync.Map
 
@@ -29,23 +36,58 @@ func tagEditMarksSolutionDirty(changed int) bool {
 	return changed > 0
 }
 
+type TagEditActionInput struct {
+	ParameterScope string `json:"parameter_scope"`
+	EntityTemplate string `json:"entity_template"`
+	Parameter      string `json:"parameter"`
+	ValueSource    string `json:"value_source"`
+	Action         string `json:"action"`
+	Replacement    string `json:"replacement"`
+	ReplaceMode    string `json:"replace_mode"`
+}
+
 type TagEditRuleInput struct {
-	ID               string `json:"id"`
-	TextCondition    string `json:"text_condition"`
-	Pattern          string `json:"pattern"`
-	Action           string `json:"action"`
-	Replacement      string `json:"replacement"`
-	Template         string `json:"template"`
-	EmptyAllowed     bool   `json:"empty_allowed"`
-	CheckProperties  bool   `json:"check_properties"`
-	CheckCommands    bool   `json:"check_commands"`
-	CheckProtections bool   `json:"check_protections"`
-	SortOrder        int    `json:"sort_order"`
+	ID               string               `json:"id"`
+	TextCondition    string               `json:"text_condition"`
+	Pattern          string               `json:"pattern"`
+	Action           string               `json:"action"`
+	Replacement      string               `json:"replacement"`
+	Template         string               `json:"template"`
+	ParameterScope   string               `json:"parameter_scope"`
+	EntityTemplate   string               `json:"entity_template"`
+	Parameter        string               `json:"parameter"`
+	ValueSource      string               `json:"value_source"`
+	Actions          []TagEditActionInput `json:"actions"`
+	EmptyAllowed     bool                 `json:"empty_allowed"`
+	CheckProperties  bool                 `json:"check_properties"`
+	CheckCommands    bool                 `json:"check_commands"`
+	CheckProtections bool                 `json:"check_protections"`
+	SortOrder        int                  `json:"sort_order"`
 }
 
 type TagEditPreview struct {
 	TotalObjects   int `json:"total_objects"`
 	ChangedObjects int `json:"changed_objects"`
+}
+
+type tagEditRulesExport struct {
+	Version int                      `json:"version"`
+	Kind    string                   `json:"kind"`
+	Rules   []tagEditRuleExportItem  `json:"rules"`
+}
+
+type tagEditRuleExportItem struct {
+	Template         string                    `json:"template"`
+	ParameterScope   string                    `json:"parameter_scope"`
+	EntityTemplate   string                    `json:"entity_template"`
+	Parameter        string                    `json:"parameter"`
+	ValueSource      string                    `json:"value_source"`
+	TextCondition    string                    `json:"text_condition"`
+	Pattern          string                    `json:"pattern"`
+	CheckProperties  bool                      `json:"check_properties"`
+	CheckCommands    bool                      `json:"check_commands"`
+	CheckProtections bool                      `json:"check_protections"`
+	Actions          []repository.TagEditAction `json:"actions"`
 }
 
 func (s *SolutionService) ListTagEditRules(ctx context.Context) ([]repository.TagEditRule, error) {
@@ -101,9 +143,107 @@ func (s *SolutionService) DeleteTagEditRule(ctx context.Context, id uuid.UUID) e
 	return err
 }
 
+func (s *SolutionService) ExportTagEditRules(ctx context.Context) ([]byte, error) {
+	start := time.Now()
+	var err error
+	defer func() {
+		slog.Info("ExportTagEditRules done", "duration_ms", time.Since(start).Milliseconds(), "err", err)
+	}()
+	rules, err := s.store.ListTagEditRules(ctx, UserIDFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	out := tagEditRulesExport{Version: 1, Kind: "tag-edit-rules"}
+	for _, rule := range rules {
+		ensureTagEditActions(&rule)
+		out.Rules = append(out.Rules, tagEditRuleExportItem{
+			Template:         rule.Template,
+			ParameterScope:   rule.ParameterScope,
+			EntityTemplate:   rule.EntityTemplate,
+			Parameter:        rule.Parameter,
+			ValueSource:      rule.ValueSource,
+			TextCondition:    rule.TextCondition,
+			Pattern:          rule.Pattern,
+			CheckProperties:  rule.CheckProperties,
+			CheckCommands:    rule.CheckCommands,
+			CheckProtections: rule.CheckProtections,
+			Actions:          rule.Actions,
+		})
+	}
+	if out.Rules == nil {
+		out.Rules = []tagEditRuleExportItem{}
+	}
+	return json.MarshalIndent(out, "", "  ")
+}
+
+func (s *SolutionService) ImportTagEditRules(ctx context.Context, raw []byte) error {
+	start := time.Now()
+	var err error
+	defer func() {
+		slog.Info("ImportTagEditRules done", "duration_ms", time.Since(start).Milliseconds(), "err", err)
+	}()
+	if len(raw) > tagEditImportMaxBytes {
+		err = ErrTagEditImportTooLarge
+		return err
+	}
+	var payload tagEditRulesExport
+	if err = json.Unmarshal(raw, &payload); err != nil {
+		err = ErrTagEditInvalidImport
+		return err
+	}
+	if payload.Kind != "" && payload.Kind != "tag-edit-rules" {
+		err = ErrTagEditInvalidImport
+		return err
+	}
+	userID := UserIDFromContext(ctx)
+	built := make([]repository.TagEditRule, 0, len(payload.Rules))
+	for i, item := range payload.Rules {
+		actions := make([]TagEditActionInput, 0, len(item.Actions))
+		for _, act := range item.Actions {
+			actions = append(actions, TagEditActionInput{
+				ParameterScope: act.ParameterScope,
+				EntityTemplate: act.EntityTemplate,
+				Parameter:      act.Parameter,
+				ValueSource:    act.ValueSource,
+				Action:         act.Action,
+				Replacement:    act.Replacement,
+				ReplaceMode:    act.ReplaceMode,
+			})
+		}
+		rule, buildErr := buildTagEditRule(uuid.New(), userID, TagEditRuleInput{
+			TextCondition:    item.TextCondition,
+			Pattern:          item.Pattern,
+			Template:         item.Template,
+			ParameterScope:   item.ParameterScope,
+			EntityTemplate:   item.EntityTemplate,
+			Parameter:        item.Parameter,
+			ValueSource:      item.ValueSource,
+			Actions:          actions,
+			CheckProperties:  item.CheckProperties,
+			CheckCommands:    item.CheckCommands,
+			CheckProtections: item.CheckProtections,
+			SortOrder:        i,
+		})
+		if buildErr != nil {
+			err = buildErr
+			return err
+		}
+		built = append(built, rule)
+	}
+	if err = s.store.DeleteTagEditRulesForUser(ctx, userID); err != nil {
+		return err
+	}
+	for _, rule := range built {
+		if err = s.store.InsertTagEditRule(ctx, rule); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func normalizeTagTextCondition(cond string) string {
 	switch cond {
-	case "starts_with", "ends_with":
+	case "starts_with", "ends_with", "empty":
 		return cond
 	default:
 		return "contains"
@@ -117,7 +257,19 @@ func normalizeTagAction(action string) string {
 	return "delete"
 }
 
+func normalizeReplaceMode(mode string) string {
+	switch mode {
+	case "whole", "first", "all", "last":
+		return mode
+	default:
+		return "found"
+	}
+}
+
 func matchTagCondition(textCondition, pattern, tag string) bool {
+	if textCondition == "empty" {
+		return isTagEmpty(tag)
+	}
 	if pattern == "" {
 		return false
 	}
@@ -138,28 +290,94 @@ func matchTagCondition(textCondition, pattern, tag string) bool {
 	return matched
 }
 
+func buildTagEditActions(input TagEditRuleInput) []repository.TagEditAction {
+	if len(input.Actions) == 0 && (input.Action != "" || input.Replacement != "") {
+		return []repository.TagEditAction{{
+			ParameterScope: "object",
+			Parameter:      "Tag",
+			ValueSource:    "field",
+			Action:         normalizeTagAction(input.Action),
+			Replacement:    input.Replacement,
+			ReplaceMode:    "found",
+		}}
+	}
+	out := make([]repository.TagEditAction, 0, len(input.Actions))
+	for _, act := range input.Actions {
+		item := repository.TagEditAction{
+			ParameterScope: normalizeParameterScope(act.ParameterScope),
+			EntityTemplate: strings.TrimSpace(act.EntityTemplate),
+			Parameter:      strings.TrimSpace(act.Parameter),
+			ValueSource:    normalizeValueSource(act.ValueSource),
+			Action:         normalizeTagAction(act.Action),
+			Replacement:    act.Replacement,
+			ReplaceMode:    normalizeReplaceMode(act.ReplaceMode),
+		}
+		if item.Parameter == "" {
+			item.Parameter = "Tag"
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
 func buildTagEditRule(id, userID uuid.UUID, input TagEditRuleInput) (repository.TagEditRule, error) {
+	actions := buildTagEditActions(input)
+	firstAction, firstReplacement := "delete", ""
+	if len(actions) > 0 {
+		firstAction = actions[0].Action
+		firstReplacement = actions[0].Replacement
+	}
 	rule := repository.TagEditRule{
 		ID:               id,
 		UserID:           userID,
 		TextCondition:    normalizeTagTextCondition(input.TextCondition),
 		Pattern:          strings.TrimSpace(input.Pattern),
-		Action:           normalizeTagAction(input.Action),
-		Replacement:      input.Replacement,
+		Action:           firstAction,
+		Replacement:      firstReplacement,
 		Template:         strings.TrimSpace(input.Template),
-		EmptyAllowed:     input.EmptyAllowed,
+		ParameterScope:   normalizeParameterScope(input.ParameterScope),
+		EntityTemplate:   strings.TrimSpace(input.EntityTemplate),
+		Parameter:        strings.TrimSpace(input.Parameter),
+		ValueSource:      normalizeValueSource(input.ValueSource),
+		Actions:          actions,
 		CheckProperties:  input.CheckProperties,
 		CheckCommands:    input.CheckCommands,
 		CheckProtections: input.CheckProtections,
 		SortOrder:        input.SortOrder,
 	}
+	if rule.Parameter == "" {
+		rule.Parameter = "Tag"
+	}
 	if rule.Template == "" {
 		return rule, ErrTagEditEmptyTemplate
 	}
-	if rule.Pattern == "" {
+	if rule.TextCondition != "empty" && rule.Pattern == "" {
 		return rule, ErrTagEditEmptyPattern
 	}
+	if rule.TextCondition == "empty" {
+		rule.Pattern = ""
+	}
+	if len(rule.Actions) == 0 {
+		return rule, ErrTagEditNoActions
+	}
 	return rule, nil
+}
+
+func ensureTagEditActions(rule *repository.TagEditRule) {
+	if len(rule.Actions) > 0 {
+		return
+	}
+	if rule.Action == "" && rule.Replacement == "" {
+		return
+	}
+	rule.Actions = []repository.TagEditAction{{
+		ParameterScope: "object",
+		Parameter:      "Tag",
+		ValueSource:    "field",
+		Action:         normalizeTagAction(rule.Action),
+		Replacement:    rule.Replacement,
+		ReplaceMode:    "found",
+	}}
 }
 
 func isTagEmpty(tag string) bool {
@@ -185,96 +403,371 @@ func applySubstringReplace(textCondition, pattern, replacement, tag string) stri
 	return tag
 }
 
-func nestedBlocksHaveTag(obj domain.GraphicObject, rule repository.TagEditRule, meta SolutionMetadata) bool {
+func tagEditEntitiesJSON(v any) [][]byte {
+	raw, _ := json.Marshal(v)
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
+		return nil
+	}
+	out := make([][]byte, len(items))
+	for i, item := range items {
+		out[i] = item
+	}
+	return out
+}
+
+func commandJSONChanged(original [][]byte, index int, current any) bool {
+	cur, _ := json.Marshal(current)
+	if index < 0 || index >= len(original) {
+		return true
+	}
+	return string(original[index]) != string(cur)
+}
+
+func applyReplaceMode(mode, textCondition, pattern, replacement, value string) string {
+	if textCondition == "empty" || mode == "whole" {
+		return replacement
+	}
+	if pattern == "" {
+		return value
+	}
+	switch mode {
+	case "first":
+		if i := strings.Index(value, pattern); i >= 0 {
+			return value[:i] + replacement + value[i+len(pattern):]
+		}
+	case "last":
+		if i := strings.LastIndex(value, pattern); i >= 0 {
+			return value[:i] + replacement + value[i+len(pattern):]
+		}
+	case "all":
+		return strings.ReplaceAll(value, pattern, replacement)
+	default:
+		return applySubstringReplace(textCondition, pattern, replacement, value)
+	}
+	return value
+}
+
+func applyActionToValue(rule repository.TagEditRule, act repository.TagEditAction, value string) string {
+	if act.Action != "replace" {
+		return ""
+	}
+	return applyReplaceMode(act.ReplaceMode, rule.TextCondition, rule.Pattern, act.Replacement, value)
+}
+
+func nestedBlocksAllNonEmpty(obj domain.GraphicObject, rule repository.TagEditRule, meta SolutionMetadata) bool {
 	start := time.Now()
-	var found bool
+	ok := true
 	defer func() {
-		slog.Debug("nestedBlocksHaveTag done", "object_id", obj.Id, "found", found, "duration_ms", time.Since(start).Milliseconds())
+		slog.Debug("nestedBlocksAllNonEmpty done", "object_id", obj.Id, "ok", ok, "duration_ms", time.Since(start).Milliseconds())
 	}()
+	if !rule.CheckProperties && !rule.CheckCommands && !rule.CheckProtections {
+		return true
+	}
 	if rule.CheckProperties {
+		found := false
 		for _, to := range obj.TechnologyObject {
 			for _, prop := range to.TechnologyProperty {
 				if !isTagEmpty(prop.Tag) {
 					found = true
-					return true
+					break
 				}
 			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			ok = false
+			return false
 		}
 	}
 	if rule.CheckCommands {
+		found := false
 		for _, cmd := range meta.Commands {
 			if !matchesTarget(cmd.Target, obj) {
 				continue
 			}
 			if !isTagEmpty(cmd.Tag) {
 				found = true
-				return true
+				break
 			}
+		}
+		if !found {
+			ok = false
+			return false
 		}
 	}
 	if rule.CheckProtections {
+		found := false
 		for _, auto := range meta.Automations {
 			if !matchesTarget(auto.Target, obj) {
 				continue
 			}
 			if !isTagEmpty(auto.Tag) {
 				found = true
-				return true
+				break
+			}
+		}
+		if !found {
+			ok = false
+			return false
+		}
+	}
+	return true
+}
+
+func firstTechnologyObject(obj *domain.GraphicObject) *domain.TechnologyObject {
+	if obj == nil || len(obj.TechnologyObject) == 0 {
+		return nil
+	}
+	return &obj.TechnologyObject[0]
+}
+
+func resolveTagEditCheckValue(rule repository.TagEditRule, obj domain.GraphicObject, meta SolutionMetadata) string {
+	cr := repository.ComplianceRule{
+		ParameterScope: rule.ParameterScope,
+		EntityTemplate: rule.EntityTemplate,
+		Parameter:      rule.Parameter,
+		ValueSource:    rule.ValueSource,
+	}
+	return resolveComplianceValues(cr, meta.asSolution(), &obj, firstTechnologyObject(&obj))
+}
+
+func ruleMatchesObject(rule repository.TagEditRule, obj domain.GraphicObject, meta SolutionMetadata) bool {
+	if rule.Template == "" || obj.TechnologyTemplate() != rule.Template {
+		return false
+	}
+	value := resolveTagEditCheckValue(rule, obj, meta)
+	if !matchTagCondition(rule.TextCondition, rule.Pattern, value) {
+		return false
+	}
+	return nestedBlocksAllNonEmpty(obj, rule, meta)
+}
+
+func setScalarField(field, value string, tag, name, description, id, externalCode *string) {
+	switch field {
+	case "Tag":
+		*tag = value
+	case "Name":
+		*name = value
+	case "Description":
+		*description = value
+	case "Id":
+		if strings.TrimSpace(value) != "" {
+			*id = value
+		}
+	case "ExternalCode":
+		*externalCode = value
+	}
+}
+
+func applyToTechnologyProperties(props []domain.TechnologyProperty, parameter, valueSource, next string) ([]domain.TechnologyProperty, bool) {
+	changed := false
+	for i := range props {
+		if props[i].Name != parameter && props[i].Template != parameter {
+			continue
+		}
+		if valueSource == "tag" {
+			if props[i].Tag != next {
+				props[i].Tag = next
+				changed = true
+			}
+			continue
+		}
+		if props[i].StringValue != next || props[i].RealValue != 0 || props[i].IntegerValue != 0 || props[i].BooleanValue != "" {
+			props[i].StringValue = next
+			props[i].RealValue = 0
+			props[i].IntegerValue = 0
+			props[i].BooleanValue = ""
+			changed = true
+		}
+	}
+	return props, changed
+}
+
+func applyActionToObject(obj *domain.GraphicObject, rule repository.TagEditRule, act repository.TagEditAction) bool {
+	to := firstTechnologyObject(obj)
+	cr := repository.ComplianceRule{
+		ParameterScope: act.ParameterScope,
+		EntityTemplate: act.EntityTemplate,
+		Parameter:      act.Parameter,
+		ValueSource:    act.ValueSource,
+	}
+	var current string
+	if act.ParameterScope == "property" {
+		current = resolvePropertyComplianceField(cr, to)
+	} else {
+		current = resolveObjectComplianceField(cr, obj, to)
+	}
+	next := applyActionToValue(rule, act, current)
+	if current == next {
+		return false
+	}
+	if act.ParameterScope == "property" {
+		if to == nil {
+			return false
+		}
+		props, changed := applyToTechnologyProperties(to.TechnologyProperty, act.Parameter, act.ValueSource, next)
+		to.TechnologyProperty = props
+		return changed
+	}
+	if isObjectScalarParameter(act.Parameter) {
+		if act.Parameter == "Tag" {
+			if obj.Tag != next {
+				obj.Tag = next
+			}
+			if to != nil {
+				to.Tag = next
+			}
+			return true
+		}
+		if act.Parameter == "Name" {
+			obj.Name = next
+			if to != nil {
+				to.Name = next
+			}
+			return true
+		}
+		if act.Parameter == "Description" {
+			obj.Description = next
+			if to != nil {
+				to.Description = next
+			}
+			return true
+		}
+		if act.Parameter == "ExternalCode" {
+			obj.ExternalCode = next
+			if to != nil {
+				to.ExternalCode = next
+			}
+			return true
+		}
+		if act.Parameter == "Id" && to != nil && strings.TrimSpace(next) != "" {
+			to.Id = next
+			return true
+		}
+		return false
+	}
+	if to == nil {
+		return false
+	}
+	props, changed := applyToTechnologyProperties(to.TechnologyProperty, act.Parameter, act.ValueSource, next)
+	to.TechnologyProperty = props
+	return changed
+}
+
+func applyActionToCommands(meta *SolutionMetadata, obj domain.GraphicObject, rule repository.TagEditRule, act repository.TagEditAction) bool {
+	changed := false
+	for i := range meta.Commands {
+		cmd := &meta.Commands[i]
+		if act.EntityTemplate != "" && cmd.Template != act.EntityTemplate {
+			continue
+		}
+		if !matchesTarget(cmd.Target, obj) {
+			continue
+		}
+		cr := repository.ComplianceRule{
+			Parameter:   act.Parameter,
+			ValueSource: act.ValueSource,
+		}
+		current := resolveEntityComplianceField(cr, cmd.Tag, cmd.Name, cmd.Description, cmd.Id, cmd.ExternalCode, cmd.TechnologyProperty)
+		next := applyActionToValue(rule, act, current)
+		if current == next {
+			continue
+		}
+		if isObjectScalarParameter(act.Parameter) {
+			setScalarField(act.Parameter, next, &cmd.Tag, &cmd.Name, &cmd.Description, &cmd.Id, &cmd.ExternalCode)
+			changed = true
+			continue
+		}
+		props, propChanged := applyToTechnologyProperties(cmd.TechnologyProperty, act.Parameter, act.ValueSource, next)
+		cmd.TechnologyProperty = props
+		if propChanged {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func applyActionToProtections(meta *SolutionMetadata, obj domain.GraphicObject, rule repository.TagEditRule, act repository.TagEditAction) bool {
+	changed := false
+	for i := range meta.Automations {
+		auto := &meta.Automations[i]
+		if act.EntityTemplate != "" && auto.Template != act.EntityTemplate {
+			continue
+		}
+		if !matchesTarget(auto.Target, obj) {
+			continue
+		}
+		cr := repository.ComplianceRule{
+			Parameter:   act.Parameter,
+			ValueSource: act.ValueSource,
+		}
+		current := resolveEntityComplianceField(cr, auto.Tag, auto.Name, auto.Description, auto.Id, auto.ExternalCode, auto.TechnologyProperty)
+		next := applyActionToValue(rule, act, current)
+		if current == next {
+			continue
+		}
+		if isObjectScalarParameter(act.Parameter) {
+			setScalarField(act.Parameter, next, &auto.Tag, &auto.Name, &auto.Description, &auto.Id, &auto.ExternalCode)
+			changed = true
+			continue
+		}
+		props, propChanged := applyToTechnologyProperties(auto.TechnologyProperty, act.Parameter, act.ValueSource, next)
+		auto.TechnologyProperty = props
+		if propChanged {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func applyTagEditToObject(obj domain.GraphicObject, rules []repository.TagEditRule, meta *SolutionMetadata) (domain.GraphicObject, bool, bool) {
+	start := time.Now()
+	var objectChanged bool
+	var metaChanged bool
+	defer func() {
+		slog.Debug("applyTagEditToObject done", "object_id", obj.Id, "changed", objectChanged, "meta_changed", metaChanged, "duration_ms", time.Since(start).Milliseconds())
+	}()
+	slog.Debug("applyTagEditToObject start", "object_id", obj.Id)
+	if meta == nil {
+		empty := SolutionMetadata{}
+		meta = &empty
+	}
+	for i := range rules {
+		rule := rules[i]
+		ensureTagEditActions(&rule)
+		if !ruleMatchesObject(rule, obj, *meta) {
+			continue
+		}
+		for _, act := range rule.Actions {
+			switch act.ParameterScope {
+			case "command":
+				if applyActionToCommands(meta, obj, rule, act) {
+					metaChanged = true
+				}
+			case "protection":
+				if applyActionToProtections(meta, obj, rule, act) {
+					metaChanged = true
+				}
+			default:
+				if applyActionToObject(&obj, rule, act) {
+					objectChanged = true
+				}
 			}
 		}
 	}
-	return false
+	return obj, objectChanged, metaChanged
 }
 
 func applyTagRulesToValue(rules []repository.TagEditRule, tag string, obj domain.GraphicObject, meta SolutionMetadata) string {
-	start := time.Now()
-	defer func() {
-		slog.Debug("applyTagRulesToValue done", "rules", len(rules), "duration_ms", time.Since(start).Milliseconds())
-	}()
-	slog.Debug("applyTagRulesToValue start", "rules", len(rules))
-	value := tag
-	for _, rule := range rules {
-		if rule.Template == "" || obj.TechnologyTemplate() != rule.Template {
-			continue
-		}
-		if isTagEmpty(value) {
-			if rule.EmptyAllowed {
-				continue
-			}
-			if !nestedBlocksHaveTag(obj, rule, meta) {
-				continue
-			}
-			if rule.Action == "replace" && rule.Replacement != "" {
-				value = rule.Replacement
-			}
-			continue
-		}
-		if !matchTagCondition(rule.TextCondition, rule.Pattern, value) {
-			continue
-		}
-		switch rule.Action {
-		case "replace":
-			value = applySubstringReplace(rule.TextCondition, rule.Pattern, rule.Replacement, value)
-		default:
-			value = ""
-		}
+	obj.Tag = tag
+	if len(obj.TechnologyObject) > 0 {
+		obj.TechnologyObject[0].Tag = tag
 	}
-	return value
-}
-
-func applyTagEditToObject(obj domain.GraphicObject, rules []repository.TagEditRule, meta SolutionMetadata) (domain.GraphicObject, bool) {
-	start := time.Now()
-	var changed bool
-	defer func() {
-		slog.Debug("applyTagEditToObject done", "object_id", obj.Id, "changed", changed, "duration_ms", time.Since(start).Milliseconds())
-	}()
-	slog.Debug("applyTagEditToObject start", "object_id", obj.Id)
-	newTag := applyTagRulesToValue(rules, obj.Tag, obj, meta)
-	if newTag != obj.Tag {
-		obj.Tag = newTag
-		changed = true
-	}
-	return obj, changed
+	updated, _, _ := applyTagEditToObject(obj, rules, &meta)
+	return updated.Tag
 }
 
 func (s *SolutionService) loadTagEditMetadata(ctx context.Context, solutionID uuid.UUID) (SolutionMetadata, error) {
@@ -349,8 +842,8 @@ func (s *SolutionService) PreviewTagEdit(ctx context.Context, solutionID uuid.UU
 	refs := s.collectGraphicObjects(sol)
 	preview := TagEditPreview{TotalObjects: countTagEditEntities(refs)}
 	for _, ref := range refs {
-		_, changed := applyTagEditToObject(ref.obj, rules, meta)
-		if changed {
+		_, objectChanged, metaChanged := applyTagEditToObject(ref.obj, rules, &meta)
+		if objectChanged || metaChanged {
 			preview.ChangedObjects++
 		}
 	}
@@ -459,15 +952,21 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 	changed := 0
 	affectedSchemes := map[string]map[string]domain.GraphicObject{}
 	var changedEntityIDs []string
+	changedCommands := map[string]struct{}{}
+	changedAutomations := map[string]struct{}{}
+	originalCommandJSON := tagEditEntitiesJSON(meta.Commands)
+	originalAutoJSON := tagEditEntitiesJSON(meta.Automations)
 
 	for pi := range sol.Projects.Project {
 		for si := range sol.Projects.Project[pi].GraphicScheme {
 			scheme := &sol.Projects.Project[pi].GraphicScheme[si]
 			for oi := range scheme.GraphicObject {
-				updated, objectChanged := applyTagEditToObject(scheme.GraphicObject[oi], rules, meta)
+				updated, objectChanged, metaChanged := applyTagEditToObject(scheme.GraphicObject[oi], rules, &meta)
 				processed++
-				if objectChanged {
+				if objectChanged || metaChanged {
 					changed++
+				}
+				if objectChanged {
 					scheme.GraphicObject[oi] = updated
 					changedEntityIDs = append(changedEntityIDs, updated.Id)
 					if affectedSchemes[scheme.Id] == nil {
@@ -479,6 +978,17 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 					_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "running", processed, changed, "", nil)
 				}
 			}
+		}
+	}
+
+	for i := range meta.Commands {
+		if commandJSONChanged(originalCommandJSON, i, meta.Commands[i]) {
+			changedCommands[meta.Commands[i].Id] = struct{}{}
+		}
+	}
+	for i := range meta.Automations {
+		if commandJSONChanged(originalAutoJSON, i, meta.Automations[i]) {
+			changedAutomations[meta.Automations[i].Id] = struct{}{}
 		}
 	}
 
@@ -518,7 +1028,15 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 		}
 	}
 
+	sol.ControlCommands.ControlCommand = meta.Commands
+	sol.Automations.Automation = meta.Automations
+
 	if changed > 0 {
+		if persistErr := s.persistSolutionMetadata(ctx, solutionID, meta); persistErr != nil {
+			finished := time.Now()
+			_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, persistErr.Error(), &finished)
+			return
+		}
 		solData, marshalErr := marshalLeanSolution(sol)
 		if marshalErr != nil {
 			finished := time.Now()
@@ -542,6 +1060,30 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 					_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, delAckErr.Error(), &finished)
 					return
 				}
+			}
+		}
+		for id := range changedCommands {
+			if upsertErr := s.store.UpsertSolutionChangedObject(ctx, solutionID, "control_command", id, ""); upsertErr != nil {
+				finished := time.Now()
+				_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, upsertErr.Error(), &finished)
+				return
+			}
+			if delAckErr := s.store.DeleteExportChangeAck(ctx, solutionID, "control_command", id); delAckErr != nil {
+				finished := time.Now()
+				_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, delAckErr.Error(), &finished)
+				return
+			}
+		}
+		for id := range changedAutomations {
+			if upsertErr := s.store.UpsertSolutionChangedObject(ctx, solutionID, "automation", id, ""); upsertErr != nil {
+				finished := time.Now()
+				_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, upsertErr.Error(), &finished)
+				return
+			}
+			if delAckErr := s.store.DeleteExportChangeAck(ctx, solutionID, "automation", id); delAckErr != nil {
+				finished := time.Now()
+				_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, delAckErr.Error(), &finished)
+				return
 			}
 		}
 		if mergeErr := s.store.MergeWorkingIntoChangedObjects(ctx, solutionID); mergeErr != nil {
