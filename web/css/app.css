@@ -1045,6 +1045,8 @@ body {
   align-items: end;
 }
 .compliance-rule__group { display: flex; flex-direction: column; gap: 2px; }
+.compliance-rule__group[hidden],
+.tag-edit-rule__group[hidden] { display: none !important; }
 .compliance-rule__label-row {
   display: flex;
   align-items: center;
