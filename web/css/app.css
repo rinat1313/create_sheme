@@ -1236,7 +1236,7 @@ body {
   flex-direction: column;
 }
 .modal__content--duplicates .modal__body {
-  overflow: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
