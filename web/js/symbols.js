@@ -22,16 +22,16 @@ const Symbols = {
       BackValve: () => this.drawCheckValve(g, anchor, s),
       ReliefValve: () => this.drawReliefValve(g, anchor, s),
       PressureWaveSmoothingValve: () => this.drawGateValve(g, anchor, s, true),
-      PipelinePump: () => this.drawCentrifugalPump(g, anchor, s),
+      PipelinePump: () => this.drawPumpLite(g, anchor, s),
       LeakPump: () => this.drawCentrifugalPump(g, anchor, s, 'LP'),
       BoosterPump: () => this.drawCentrifugalPump(g, anchor, s, 'BP'),
-      Tank: () => this.drawTank(g, anchor, s, ctx),
+      Tank: () => this.drawTankLite(g, anchor, s),
       TankBattery: () => this.drawTankBattery(g, anchor, s),
       TankDump: () => this.drawTank(g, anchor, s, ctx, true),
       Enter: () => this.drawFlowPort(g, anchor, s, 'in'),
       Exit: () => this.drawFlowPort(g, anchor, s, 'out'),
       Filter: () => this.drawFilter(g, anchor, s),
-      PumpStation: () => this.drawPumpStation(g, anchor, s),
+      PumpStation: () => this.drawStationLite(g, anchor, s),
       CompositePumpStation: () => this.drawPumpStation(g, anchor, s, true),
       ShopMainstream: () => this.drawPumpStation(g, anchor, s, true),
       Sensor: () => this.drawSensor(g, anchor, s),
@@ -61,91 +61,112 @@ const Symbols = {
     const s = ctx.scale;
     const half = (n) => s(n);
     const presets = {
-      Valve: { w: half(36), h: half(44) },
-      BackValve: { w: half(32), h: half(32) },
-      ReliefValve: { w: half(32), h: half(40) },
-      PressureWaveSmoothingValve: { w: half(36), h: half(44) },
-      PipelinePump: { w: half(44), h: half(44) },
+      Valve: { w: half(30), h: half(30) },
+      BackValve: { w: half(30), h: half(24) },
+      ReliefValve: { w: half(28), h: half(36) },
+      PressureWaveSmoothingValve: { w: half(30), h: half(36) },
+      PipelinePump: { w: half(36), h: half(36) },
       LeakPump: { w: half(44), h: half(44) },
       BoosterPump: { w: half(44), h: half(44) },
-      Tank: { w: half(60), h: half(100) },
-      TankBattery: { w: half(80), h: half(70) },
+      Tank: { w: half(40), h: half(60) },
+      TankBattery: { w: half(52), h: half(48) },
       TankDump: { w: half(60), h: half(100) },
-      Enter: { w: half(36), h: half(36) },
-      Exit: { w: half(36), h: half(36) },
-      Filter: { w: half(40), h: half(36) },
-      PumpStation: { w: half(72), h: half(52) },
+      Enter: { w: half(28), h: half(28) },
+      Exit: { w: half(28), h: half(28) },
+      Filter: { w: half(32), h: half(28) },
+      PumpStation: { w: half(52), h: half(36) },
       CompositePumpStation: { w: half(72), h: half(52) },
       ShopMainstream: { w: half(72), h: half(52) },
       Sensor: { w: half(14), h: half(18) },
       UnitMeasureQuality: { w: half(32), h: half(32) },
-      PressureControlUnit: { w: half(44), h: half(36) },
+      PressureControlUnit: { w: half(32), h: half(26) },
       LeakDetectionSystem: { w: half(40), h: half(40) },
-      CleanDiagnSystemCamera: { w: half(40), h: half(32) },
-      CleanDiagnSystemCameraSensor: { w: half(36), h: half(28) },
-      CleanDiagnSystemCameraPass: { w: half(36), h: half(28) },
-      LeaseAutomaticCustodyTransfer: { w: half(44), h: half(36) },
+      CleanDiagnSystemCamera: { w: half(24), h: half(32) },
+      CleanDiagnSystemCameraSensor: { w: half(32), h: half(28) },
+      CleanDiagnSystemCameraPass: { w: half(32), h: half(28) },
+      LeaseAutomaticCustodyTransfer: { w: half(32), h: half(32) },
       LinearPartOfTrunkPipeline: { w: half(48), h: half(20) },
       TechnologicalArea: { w: half(64), h: half(48) },
-      CompositeGeneralObject: { w: half(52), h: half(40) },
-      PipelineTieIn: { w: half(36), h: half(36) },
-      PointOilHeating: { w: half(40), h: half(40) },
+      CompositeGeneralObject: { w: half(40), h: half(32) },
+      PipelineTieIn: { w: half(32), h: half(28) },
+      PointOilHeating: { w: half(32), h: half(24) },
       AreaControlCenter: { w: half(56), h: half(44) },
     };
     const p = presets[template] || { w: half(40), h: half(40) };
     return { x: anchor.x - p.w / 2, y: anchor.y - p.h / 2, width: p.w, height: p.h };
   },
 
+  stroke(extra) {
+    return Object.assign({
+      fill: 'none',
+      stroke: 'var(--equipment-stroke)',
+      'stroke-width': 1.25,
+      'stroke-linejoin': 'round',
+      'stroke-linecap': 'round',
+    }, extra || {});
+  },
+
   drawGateValve(g, anchor, s, damped) {
-    const bw = s(16);
-    const stem = s(12);
+    const q = s(14);
     const x = anchor.x;
     const y = anchor.y;
-    g.appendChild(this.el('polygon', {
-      points: `${x - bw},${y - bw} ${x},${y} ${x - bw},${y + bw}`,
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${x},${y - q} ${x + q},${y} ${x},${y + q} ${x - q},${y}`,
       class: 'sym-valve__body',
-    }));
-    g.appendChild(this.el('polygon', {
-      points: `${x + bw},${y - bw} ${x},${y} ${x + bw},${y + bw}`,
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-      class: 'sym-valve__body',
-    }));
-    g.appendChild(this.el('line', {
-      x1: x, y1: y - bw, x2: x, y2: y - bw - stem,
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 2, class: 'sym-valve__stem',
-    }));
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: x - q * 0.55, y1: y - q * 0.55, x2: x + q * 0.55, y2: y + q * 0.55, class: 'sym-valve__x',
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: x + q * 0.55, y1: y - q * 0.55, x2: x - q * 0.55, y2: y + q * 0.55, class: 'sym-valve__x',
+    })));
     if (damped) {
-      g.appendChild(this.el('line', {
-        x1: x - s(4), y1: y - bw - stem, x2: x + s(4), y2: y - bw - stem,
-        stroke: 'var(--state-info)', 'stroke-width': 2,
-      }));
+      g.appendChild(this.el('line', this.stroke({
+        x1: x - s(6), y1: y - q - s(4), x2: x + s(6), y2: y - q - s(4),
+        stroke: 'var(--state-info)',
+      })));
     }
   },
 
   drawCheckValve(g, anchor, s) {
-    const r = s(14);
     const x = anchor.x;
     const y = anchor.y;
-    g.appendChild(this.el('circle', {
-      cx: x, cy: y, r, fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    g.appendChild(this.el('polygon', {
-      points: `${x - s(8)},${y + s(4)} ${x + s(8)},${y} ${x - s(8)},${y - s(4)}`,
-      fill: 'var(--state-normal)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1,
-    }));
-    g.appendChild(this.el('line', {
-      x1: x - r, y1: y, x2: x + r, y2: y,
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
+    const w = s(14);
+    g.appendChild(this.el('line', this.stroke({
+      x1: x - w, y1: y, x2: x + w, y2: y,
+    })));
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${x - s(4)},${y - s(10)} ${x + s(10)},${y} ${x - s(4)},${y + s(10)}`,
+    })));
   },
 
   drawReliefValve(g, anchor, s) {
-    this.drawGateValve(g, anchor, s);
-    g.appendChild(this.el('path', {
-      d: `M ${anchor.x - s(6)} ${anchor.y - s(22)} L ${anchor.x} ${anchor.y - s(28)} L ${anchor.x + s(6)} ${anchor.y - s(22)}`,
-      fill: 'none', stroke: 'var(--state-warning)', 'stroke-width': 1.5,
-    }));
+    const q = s(13);
+    const x = anchor.x;
+    const y = anchor.y;
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${x},${y - q} ${x + q},${y} ${x},${y + q} ${x - q},${y}`,
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: x, y1: y - q, x2: x, y2: y + q,
+    })));
+    g.appendChild(this.el('path', this.stroke({
+      d: `M ${x - s(5)} ${y - q - s(2)} L ${x} ${y - q - s(8)} L ${x + s(5)} ${y - q - s(2)}`,
+      stroke: 'var(--state-info)',
+    })));
+  },
+
+  drawPumpLite(g, anchor, s) {
+    const r = s(16);
+    const x = anchor.x;
+    const y = anchor.y;
+    g.appendChild(this.el('circle', this.stroke({
+      cx: x, cy: y, r, class: 'sym-pump__casing',
+    })));
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${x - s(5)},${y - s(7)} ${x + s(9)},${y} ${x - s(5)},${y + s(7)}`,
+      class: 'sym-pump__rotor',
+    })));
   },
 
   drawCentrifugalPump(g, anchor, s, label) {
@@ -170,6 +191,19 @@ const Symbols = {
         fill: 'var(--text-secondary)', class: 'sym-pump__label',
       })).textContent = label;
     }
+  },
+
+  drawTankLite(g, anchor, s) {
+    const w = s(36);
+    const h = s(56);
+    const x = anchor.x - w / 2;
+    const y = anchor.y - h / 2;
+    g.appendChild(this.el('rect', this.stroke({
+      x, y, width: w, height: h, rx: s(2), class: 'sym-tank__shell',
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: x + s(4), y1: y + s(8), x2: x + w - s(4), y2: y + s(8),
+    })));
   },
 
   drawTank(g, anchor, s, ctx, withDrain) {
@@ -203,58 +237,60 @@ const Symbols = {
   },
 
   drawTankBattery(g, anchor, s) {
-    const w = s(24);
-    const h = s(56);
-    const gap = s(8);
-    for (let i = -1; i <= 1; i++) {
-      const cx = anchor.x + i * (w + gap);
-      const x = cx - w / 2;
-      const y = anchor.y - h / 2;
-      g.appendChild(this.el('rect', {
-        x, y, width: w, height: h, rx: s(4),
-        fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-      }));
-      g.appendChild(this.el('ellipse', {
-        cx, cy: y, rx: w / 2, ry: s(5),
-        fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1,
-      }));
+    const w = s(28);
+    const h = s(44);
+    const x = anchor.x - w / 2 - s(4);
+    const y = anchor.y - h / 2;
+    g.appendChild(this.el('rect', this.stroke({
+      x, y, width: w, height: h, rx: s(2),
+    })));
+    for (let i = 0; i < 3; i++) {
+      g.appendChild(this.el('line', this.stroke({
+        x1: x + w + s(5) + i * s(4), y1: y + s(10),
+        x2: x + w + s(5) + i * s(4), y2: y + h - s(10),
+        stroke: 'var(--state-info)',
+      })));
     }
   },
 
   drawFlowPort(g, anchor, s, dir) {
-    const r = s(16);
+    const a = s(12);
     const x = anchor.x;
     const y = anchor.y;
-    g.appendChild(this.el('circle', {
-      cx: x, cy: y, r, fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 2,
-    }));
-    const arrow = dir === 'in'
-      ? `M ${x + s(10)} ${y} L ${x - s(4)} ${y - s(8)} L ${x - s(4)} ${y + s(8)} Z`
-      : `M ${x - s(10)} ${y} L ${x + s(4)} ${y - s(8)} L ${x + s(4)} ${y + s(8)} Z`;
-    g.appendChild(this.el('path', {
-      d: arrow, fill: 'var(--state-normal)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1,
-    }));
+    g.appendChild(this.el('rect', this.stroke({
+      x: x - a, y: y - a, width: a * 2, height: a * 2,
+    })));
+    if (dir === 'in') {
+      g.appendChild(this.el('polyline', this.stroke({
+        points: `${x + s(6)},${y - s(6)} ${x - s(5)},${y} ${x + s(6)},${y + s(6)}`,
+      })));
+    } else {
+      g.appendChild(this.el('polyline', this.stroke({
+        points: `${x - s(6)},${y - s(6)} ${x + s(5)},${y} ${x - s(6)},${y + s(6)}`,
+      })));
+    }
   },
 
   drawFilter(g, anchor, s) {
-    const w = s(18);
-    const h = s(14);
     const x = anchor.x;
     const y = anchor.y;
-    g.appendChild(this.el('polygon', {
-      points: `${x - w},${y - h} ${x + w},${y - h} ${x},${y + h}`,
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    g.appendChild(this.el('line', {
-      x1: x - w, y1: y + h, x2: x + w, y2: y + h,
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 2,
-    }));
-    for (let i = -1; i <= 1; i++) {
-      g.appendChild(this.el('line', {
-        x1: x + i * s(6), y1: y - h + s(2), x2: x + i * s(4), y2: y + h - s(2),
-        stroke: 'var(--text-muted)', 'stroke-width': 1,
-      }));
-    }
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${x - s(14)},${y - s(10)} ${x + s(14)},${y - s(10)} ${x},${y + s(12)}`,
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: x - s(7), y1: y - s(2), x2: x + s(7), y2: y - s(2),
+    })));
+  },
+
+  drawStationLite(g, anchor, s) {
+    const w = s(48);
+    const h = s(32);
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - w / 2, y: anchor.y - h / 2, width: w, height: h,
+    })));
+    g.appendChild(this.el('circle', this.stroke({
+      cx: anchor.x, cy: anchor.y, r: s(8),
+    })));
   },
 
   drawPumpStation(g, anchor, s, composite) {
@@ -281,23 +317,15 @@ const Symbols = {
   },
 
   drawSensor(g, anchor, s) {
-    const w = s(10);
-    const h = s(12);
     const x = anchor.x;
     const y = anchor.y;
-    g.appendChild(this.el('polygon', {
-      points: `${x - w / 2},${y - h} ${x + w / 2},${y - h} ${x},${y}`,
-      fill: 'var(--state-info)',
-      stroke: 'var(--equipment-stroke)',
-      'stroke-width': 1.5,
-      'stroke-linejoin': 'round',
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${x},${y - s(10)} ${x + s(7)},${y + s(6)} ${x - s(7)},${y + s(6)}`,
       class: 'sym-sensor__triangle',
-    }));
-    g.appendChild(this.el('line', {
-      x1: x, y1: y, x2: x, y2: y + s(4),
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5, 'stroke-linecap': 'round',
-      class: 'sym-sensor__stem',
-    }));
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: x, y1: y + s(6), x2: x, y2: y + s(12), class: 'sym-sensor__stem',
+    })));
   },
 
   drawInstrument(g, anchor, s, letter) {
@@ -313,18 +341,15 @@ const Symbols = {
   },
 
   drawController(g, anchor, s) {
-    const w = s(44);
-    const h = s(36);
-    const x = anchor.x - w / 2;
-    const y = anchor.y - h / 2;
-    g.appendChild(this.el('rect', {
-      x, y, width: w, height: h, rx: s(3),
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    g.appendChild(this.el('path', {
-      d: `M ${anchor.x - s(8)} ${anchor.y} L ${anchor.x} ${anchor.y - s(6)} L ${anchor.x + s(8)} ${anchor.y} L ${anchor.x} ${anchor.y + s(6)} Z`,
-      fill: 'var(--state-warning)', stroke: 'none',
-    }));
+    const w = s(28);
+    const h = s(22);
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - w / 2, y: anchor.y - h / 2, width: w, height: h,
+    })));
+    g.appendChild(this.el('polygon', this.stroke({
+      points: `${anchor.x},${anchor.y - s(6)} ${anchor.x + s(6)},${anchor.y} ${anchor.x},${anchor.y + s(6)} ${anchor.x - s(6)},${anchor.y}`,
+      stroke: 'var(--state-info)',
+    })));
   },
 
   drawLeakDetector(g, anchor, s) {
@@ -340,72 +365,45 @@ const Symbols = {
   },
 
   drawSensorFlag(g, anchor, s, dashed) {
-    const flagH = s(22);
-    const flagLen = s(26);
-    const poleX = anchor.x - flagLen * 0.35;
-    const tipX = anchor.x + flagLen * 0.65;
+    const poleX = anchor.x - s(8);
     const y = anchor.y;
-    const top = y - flagH / 2;
-    const bottom = y + flagH / 2;
-
-    g.appendChild(this.el('line', {
-      x1: poleX, y1: top - s(5), x2: poleX, y2: bottom + s(5),
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 2, 'stroke-linecap': 'round',
-      class: 'sym-sensor-flag__pole',
-    }));
-
-    const banner = this.el('polygon', {
-      points: `${poleX},${top} ${poleX},${bottom} ${tipX},${y}`,
-      fill: dashed ? 'none' : 'var(--equipment-fill)',
-      stroke: 'var(--equipment-stroke)',
-      'stroke-width': 1.5,
-      'stroke-linejoin': 'round',
+    g.appendChild(this.el('line', this.stroke({
+      x1: poleX, y1: y - s(12), x2: poleX, y2: y + s(12), class: 'sym-sensor-flag__pole',
+    })));
+    const banner = this.el('polygon', this.stroke({
+      points: `${poleX},${y - s(8)} ${poleX},${y + s(8)} ${anchor.x + s(12)},${y}`,
       class: 'sym-sensor-flag__banner',
-    });
+    }));
     if (dashed) {
-      banner.setAttribute('stroke-dasharray', `${s(4)} ${s(3)}`);
+      banner.setAttribute('stroke-dasharray', `${s(3)} ${s(2)}`);
     }
     g.appendChild(banner);
-
-    g.appendChild(this.el('circle', {
-      cx: poleX, cy: y, r: s(2.5),
-      fill: 'var(--state-info)', class: 'sym-sensor-flag__point',
-    }));
   },
 
   drawCamera(g, anchor, s) {
-    const w = s(36);
-    const h = s(24);
-    const x = anchor.x - w / 2;
-    const y = anchor.y - h / 2;
-    g.appendChild(this.el('rect', {
-      x, y, width: w, height: h, rx: s(3),
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    g.appendChild(this.el('circle', {
-      cx: anchor.x, cy: anchor.y, r: s(6),
-      fill: 'var(--state-info)', opacity: 0.6,
-    }));
-    g.appendChild(this.el('polygon', {
-      points: `${x + w} ${anchor.y - s(6)} ${x + w + s(8)} ${anchor.y - s(10)} ${x + w + s(8)} ${anchor.y + s(10)} ${x + w} ${anchor.y + s(6)}`,
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1,
-    }));
+    g.appendChild(this.el('circle', this.stroke({
+      cx: anchor.x, cy: anchor.y, r: s(10),
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: anchor.x, y1: anchor.y + s(10), x2: anchor.x, y2: anchor.y + s(16),
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: anchor.x - s(5), y1: anchor.y + s(16), x2: anchor.x + s(5), y2: anchor.y + s(16),
+    })));
   },
 
   drawCustodyTransfer(g, anchor, s) {
-    const w = s(40);
-    g.appendChild(this.el('line', {
-      x1: anchor.x - w / 2, y1: anchor.y + s(8), x2: anchor.x + w / 2, y2: anchor.y + s(8),
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 2,
-    }));
-    g.appendChild(this.el('line', {
-      x1: anchor.x, y1: anchor.y + s(8), x2: anchor.x, y2: anchor.y - s(14),
-      stroke: 'var(--equipment-stroke)', 'stroke-width': 2,
-    }));
-    g.appendChild(this.el('path', {
-      d: `M ${anchor.x - s(12)} ${anchor.y - s(14)} L ${anchor.x + s(12)} ${anchor.y - s(14)} L ${anchor.x} ${anchor.y - s(22)} Z`,
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
+    const a = s(14);
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - a, y: anchor.y - a, width: a * 2, height: a * 2,
+    })));
+    g.appendChild(this.el('circle', this.stroke({
+      cx: anchor.x, cy: anchor.y, r: s(6),
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: anchor.x, y1: anchor.y, x2: anchor.x + s(5), y2: anchor.y - s(4),
+      stroke: 'var(--state-info)',
+    })));
   },
 
   drawTrunkSection(g, anchor, s) {
@@ -435,47 +433,38 @@ const Symbols = {
   },
 
   drawComposite(g, anchor, s) {
-    const w = s(52);
-    const h = s(40);
-    g.appendChild(this.el('rect', {
-      x: anchor.x - w / 2, y: anchor.y - h / 2, width: w, height: h, rx: s(4),
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    g.appendChild(this.el('rect', {
-      x: anchor.x - w / 2 + s(4), y: anchor.y - h / 2 + s(4), width: w / 2 - s(6), height: h - s(8), rx: s(2),
-      fill: 'none', stroke: 'var(--text-muted)', 'stroke-width': 1,
-    }));
-    g.appendChild(this.el('rect', {
-      x: anchor.x + s(2), y: anchor.y - h / 2 + s(4), width: w / 2 - s(6), height: h - s(8), rx: s(2),
-      fill: 'none', stroke: 'var(--text-muted)', 'stroke-width': 1,
-    }));
+    const w = s(28);
+    const h = s(22);
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - w / 2 - s(4), y: anchor.y - h / 2 - s(3), width: w, height: h,
+    })));
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - w / 2 + s(4), y: anchor.y - h / 2 + s(3), width: w, height: h,
+    })));
   },
 
   drawTieIn(g, anchor, s) {
-    const r = s(14);
-    g.appendChild(this.el('circle', {
-      cx: anchor.x, cy: anchor.y, r,
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    g.appendChild(this.el('path', {
-      d: `M ${anchor.x - s(10)} ${anchor.y} L ${anchor.x} ${anchor.y - s(10)} L ${anchor.x + s(10)} ${anchor.y} L ${anchor.x} ${anchor.y + s(10)} Z`,
-      fill: 'none', stroke: 'var(--state-normal)', 'stroke-width': 1.5,
-    }));
+    g.appendChild(this.el('line', this.stroke({
+      x1: anchor.x - s(14), y1: anchor.y, x2: anchor.x + s(14), y2: anchor.y,
+    })));
+    g.appendChild(this.el('line', this.stroke({
+      x1: anchor.x, y1: anchor.y, x2: anchor.x, y2: anchor.y - s(12),
+    })));
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - s(4), y: anchor.y - s(4), width: s(8), height: s(8),
+    })));
   },
 
   drawHeater(g, anchor, s) {
-    const w = s(36);
-    const h = s(28);
-    g.appendChild(this.el('rect', {
-      x: anchor.x - w / 2, y: anchor.y - h / 2, width: w, height: h, rx: s(3),
-      fill: 'var(--equipment-fill)', stroke: 'var(--equipment-stroke)', 'stroke-width': 1.5,
-    }));
-    for (let i = 0; i < 3; i++) {
-      g.appendChild(this.el('path', {
-        d: `M ${anchor.x - s(10) + i * s(10)} ${anchor.y - s(6)} Q ${anchor.x - s(5) + i * s(10)} ${anchor.y} ${anchor.x - s(10) + i * s(10)} ${anchor.y + s(6)}`,
-        fill: 'none', stroke: 'var(--state-warning)', 'stroke-width': 1.5,
-      }));
-    }
+    const w = s(28);
+    const h = s(20);
+    g.appendChild(this.el('rect', this.stroke({
+      x: anchor.x - w / 2, y: anchor.y - h / 2, width: w, height: h,
+    })));
+    g.appendChild(this.el('path', this.stroke({
+      d: `M ${anchor.x - s(8)} ${anchor.y + s(2)} Q ${anchor.x - s(4)} ${anchor.y - s(6)} ${anchor.x} ${anchor.y + s(2)} Q ${anchor.x + s(4)} ${anchor.y - s(6)} ${anchor.x + s(8)} ${anchor.y + s(2)}`,
+      stroke: 'var(--state-info)',
+    })));
   },
 
   drawControlCenter(g, anchor, s) {
