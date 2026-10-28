@@ -61,8 +61,6 @@ const Symbols = {
     const map = {
       Valve: () => this.drawGateValveBody(g, anchor, s),
       BackValve: () => this.drawCheckValve(g, anchor, s),
-      ReliefValve: () => this.drawReliefValve(g, anchor, s),
-      PressureWaveSmoothingValve: () => this.drawGateValve(g, anchor, s, true),
       PipelinePump: () => this.drawCentrifugalPump(g, anchor, s),
       LeakPump: () => this.drawCentrifugalPump(g, anchor, s, 'LP'),
       BoosterPump: () => this.drawCentrifugalPump(g, anchor, s, 'BP'),
@@ -104,8 +102,6 @@ const Symbols = {
     const presets = {
       Valve: { w: half(44), h: half(56) },
       BackValve: { w: half(40), h: half(28) },
-      ReliefValve: { w: half(40), h: half(48) },
-      PressureWaveSmoothingValve: { w: half(44), h: half(56) },
       PipelinePump: { w: half(40), h: half(36) },
       LeakPump: { w: half(44), h: half(48) },
       BoosterPump: { w: half(44), h: half(48) },
