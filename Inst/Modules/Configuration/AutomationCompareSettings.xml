@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <ActionColumn value="11" />
+  <ActionsIgnoreKeyList value="контрол" />
+  <ActionsIncludeKeyList value="включен, закрыт, останов, отключен" />
+  <AutomationsAntomymsList value="включ, выключ, включ, отключ, вход, выход, мна, пна, мнс, пнс, номинал, неноминал, порог 1, порог 2, пуск, останов" />
+  <AutomationsAuxilaryKeyList value="блокиров, вентилятор, воздух, вращен, грязеулов, емкост, измерен, кнопк, коллектор, корпус, номинал, обмот, пенораствор, подшипник, помещен, разрежен, резервуар, ротор, сердечн, смазочн, статор, телемех, трубопровод, утеч, фильт, электр" />
+  <AutomationsMainKeyList value="авариин, верхн, вибрац, давлен, допустим, жидкост, загазован, закрыт, заполнен, затопл, избыточн, максимал, масл, минимал, несанкционир, нижн, нормативн, опорожнен, повышен, пожар, предельн, предупредит, расход, смещен, снижен, сохранен, температур, уровен" />
+  <DefenceMeasurementUnitColumn value="4" />
+  <DefenceNameColumnHead value="3" />
+  <DefenceNameColumnTail value="3" />
+  <DefenceTimeSpanColumn value="6" />
+  <DefenceValueColumn value="5" />
+  <IsTankIncluded value="false" />
+  <MaxAutomationsCount value="10" />
+  <MinCompliance value="50" />
+  <ObjectNameColumn value="1" />
+  <ObjectNumberColumn value="2" />
+  <RowNumberColumn value="0" />
+</root>

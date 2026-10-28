@@ -1,0 +1,148 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Rsuog.Udt.Instructor.Simulation</name>
+    </assembly>
+    <members>
+        <member name="T:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime">
+            <summary>
+            Режимы управления (П)МНА
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime.Telemechanical">
+            <summary>
+            0. Телемеханический
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime.Main">
+            <summary>
+            1. Основной.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime.Reserve">
+            <summary>
+            2. Резервный.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime.Maintenance">
+            <summary>
+            3. Ремонтный.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime.Button">
+            <summary>
+            4. Кнопочный.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpControlRegime.Conservation">
+            <summary>
+            5. Консервация.
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Instructor.Simulation.Validators.PumpState">
+            <summary>
+            Состояние (П)МНА
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.WreckedWorking">
+            <summary>
+            -2. В аварии, работает.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.WreckedStopped">
+            <summary>
+            -1. В аварии, не работает.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.None">
+            <summary>
+            0 - Статус не определен
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.Working">
+            <summary>
+            1. В работе.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.StartProgram">
+            <summary>
+            2. Запускается.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.ReadyToStart">
+            <summary>
+            3. Готов к пуску.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.Reserved">
+            <summary>
+            4. В автоматическом резерве.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.Stopped">
+            <summary>
+            5. Остановлен.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.Maintenance">
+            <summary>
+            6. В ремонте/обслуживании.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.Conservation">
+            <summary>
+            7. В консервации.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.PumpState.StopProgram">
+            <summary>
+            8. Останавливается.
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Instructor.Simulation.Validators.ValveState">
+            <summary>
+            Состояния задвижки.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Wrecked">
+            <summary>
+            -1. В аварии.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.None">
+            <summary>
+            0 Статус не поеределен
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Opened">
+            <summary>
+            1. Открыта.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Closing">
+            <summary>
+            2. Закрывается.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Closed">
+            <summary>
+            3. Закрыта.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Opening">
+            <summary>
+            4. Открывается.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Intermediate">
+            <summary>
+            5. В промежуточном положении.
+            </summary>
+        </member>
+        <member name="F:Rsuog.Udt.Instructor.Simulation.Validators.ValveState.Moving">
+            <summary>
+            6. В движении.
+            </summary>
+        </member>
+    </members>
+</doc>

@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Rsuog.Udt.Controls.DecisionSupportSystem</name>
+    </assembly>
+    <members>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.AccuracyReporter.AccuracyReporterControl">
+            <summary>
+            Логика взаимодействия для AccuracyReporterControl.xaml
+            </summary>
+            <summary>
+            AccuracyReporterControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.AccuracyReporter.AccuracyReporterControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ClickHouseService">
+            <summary>
+            Сервис взаимодействия с БД ClickHouse.
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ClickHouseTimeConverter">
+            <summary>
+            Класс с методами для перевода времени в Unix-формат, в котором оно хранится в ClickHouse
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ClickHouseTimeConverter.DateTimeToUnix(System.DateTime)">
+            <summary>
+            Переводит DateTime в Unix-формат
+            </summary>
+            <param name="dateTime"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ClickHouseTimeConverter.UnixToDateTime(System.UInt32)">
+            <summary>
+            Переводит Unix-формат времени в DateTime
+            </summary>
+            <param name="seconds"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ClickHouseTimeConverter.DateTimeToUnixMsk(System.DateTime)">
+            <summary>
+            Переводит DateTime по МСК (+3 часа) в Unix-формат
+            </summary>
+            <param name="dateTime"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ClickHouseTimeConverter.UnixToDateTimeMsk(System.UInt32)">
+            <summary>
+            Переводит Unix-формат времени в DateTime по МСК (+3 часа)
+            </summary>
+            <param name="seconds"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.ClickHouseData.ProvisionService.GetDataIntervals(System.TimeSpan,System.Collections.Generic.IEnumerable{System.String})">
+            <summary>
+            Возвращает интервалы времени, в которые есть данные хотябы по одному из заданных тэгов tags.
+            Если tags == null или tags является пустым перечислением, то учитываются данные по всем существующим тэгам.
+            В рамках одного интервала врмени данные идут подряд с разностью во времени не более, чем maxEmptySpan.
+            Допустимы интервалы времени, начало и конец которых совпадают (в случае если слева и справа от временной точки разрывы времени более чем maxEmptySpan).
+            Начало и конец интервала времени - это время первой и последней временной точки, для которой есть данные соответственно.
+            </summary>
+            <param name="maxEmptySpan">Максимальный разрыв во времени между идущими подряд данными в рамках одного интервала</param>
+            <param name="tags">Тэги, данные хотя бы по одному из которых учитываются при поиске интервалов</param>
+            <returns>Список интервалов времени</returns>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.FlowImprover.FlowImproverControl">
+            <summary>
+            Логика взаимодействия для FlowImproverControl.xaml
+            </summary>
+            <summary>
+            FlowImproverControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.FlowImprover.FlowImproverControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.Flow.FlowControl">
+            <summary>
+            Логика взаимодействия для FlowControl.xaml
+            </summary>
+            <summary>
+            FlowControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.Flow.FlowControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.HydroslopeExplorerControl">
+            <summary>
+            Логика взаимодействия для HydroslopeExplorerControl.xaml
+            </summary>
+            <summary>
+            HydroslopeExplorerControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.HydroslopeExplorerControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.Hydroslope.HydroslopeControl">
+            <summary>
+            Логика взаимодействия для HydroslopeControl.xaml
+            </summary>
+            <summary>
+            HydroslopeControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.HydroslopeExplorer.Hydroslope.HydroslopeControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.PlotViewer.PlotViewerControl">
+            <summary>
+            Логика взаимодействия для PlotViewerControl.xaml
+            </summary>
+            <summary>
+            PlotViewerControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.PlotViewer.PlotViewerControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+        <member name="T:Rsuog.Udt.Controls.DecisionSupportSystem.TankMonitoring.MonitoringControl">
+            <summary>
+            Логика взаимодействия для MonitoringControl.xaml
+            </summary>
+            <summary>
+            MonitoringControl
+            </summary>
+        </member>
+        <member name="M:Rsuog.Udt.Controls.DecisionSupportSystem.TankMonitoring.MonitoringControl.InitializeComponent">
+            <summary>
+            InitializeComponent
+            </summary>
+        </member>
+    </members>
+</doc>
