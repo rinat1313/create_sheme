@@ -59,7 +59,7 @@ const Symbols = {
   draw(g, template, anchor, ctx) {
     const s = ctx.scale;
     const map = {
-      Valve: () => this.drawGateValve(g, anchor, s),
+      Valve: () => this.drawGateValveBody(g, anchor, s),
       BackValve: () => this.drawCheckValve(g, anchor, s),
       ReliefValve: () => this.drawReliefValve(g, anchor, s),
       PressureWaveSmoothingValve: () => this.drawGateValve(g, anchor, s, true),
@@ -137,13 +137,11 @@ const Symbols = {
     return { x: anchor.x - p.w / 2, y: anchor.y - p.h / 2, width: p.w, height: p.h };
   },
 
-  drawGateValve(g, anchor, s, damped) {
+  drawGateValveBody(g, anchor, s) {
     const x = anchor.x;
     const y = anchor.y;
     const hw = s(15);
     const hh = s(11);
-    this.flange(g, x - hw, y, s(4), hh);
-    this.flange(g, x + hw, y, s(4), hh);
     this.add(g, 'polygon', {
       points: `${x - hw + s(2)},${y - hh} ${x},${y} ${x - hw + s(2)},${y + hh}`,
       fill: this.P.gD,
@@ -170,12 +168,23 @@ const Symbols = {
       fill: this.P.st, stroke: this.P.ink,
     });
     this.add(g, 'rect', {
-      x: x + s(4), y: stemTop - s(4), width: s(10), height: s(6), rx: s(2),
-      fill: this.P.stL, stroke: this.P.stD,
-    });
-    this.add(g, 'rect', {
       x: x - s(6), y: stemTop - s(5), width: s(12), height: s(3),
       fill: this.P.y, stroke: this.P.yD,
+    });
+  },
+
+  drawGateValve(g, anchor, s, damped) {
+    const x = anchor.x;
+    const y = anchor.y;
+    const hw = s(15);
+    const hh = s(11);
+    this.flange(g, x - hw, y, s(4), hh);
+    this.flange(g, x + hw, y, s(4), hh);
+    this.drawGateValveBody(g, anchor, s);
+    const stemTop = y - hh - s(10);
+    this.add(g, 'rect', {
+      x: x + s(4), y: stemTop - s(4), width: s(10), height: s(6), rx: s(2),
+      fill: this.P.stL, stroke: this.P.stD,
     });
     if (damped) {
       this.add(g, 'circle', {
@@ -188,8 +197,6 @@ const Symbols = {
     const x = anchor.x;
     const y = anchor.y;
     const r = s(11);
-    this.flange(g, x - r - s(3), y, s(3.2), s(9));
-    this.flange(g, x + r + s(3), y, s(3.2), s(9));
     this.add(g, 'circle', { cx: x, cy: y, r, fill: this.P.g });
     this.add(g, 'ellipse', {
       cx: x - s(3), cy: y - s(3), rx: s(5), ry: s(4), fill: this.P.gL, stroke: 'none',
