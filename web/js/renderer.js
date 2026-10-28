@@ -7,7 +7,7 @@ const Renderer = {
   baseViewBox: null,
   layoutOffset: { x: 0, y: 0 },
   layoutScale: 1,
-  objectSymbolScale: 1.5,
+  objectSymbolScale: 1.2,
   schemeOrigin: { x: 0, y: 0 },
   _renderJob: 0,
   labelFontSize: 11,
@@ -217,6 +217,70 @@ const Renderer = {
 
   isPipeLike(template) {
     return ['Pipe', 'Bridge', 'Pipeline'].includes(template);
+  },
+
+  isFlagTrue(val) {
+    return String(val || '').toLowerCase() === 'true';
+  },
+
+  getObjectPose(obj) {
+    const angle = this.parseCoord(obj.Angle);
+    let sx = this.isFlagTrue(obj.IsHorizontalReflected) ? -1 : 1;
+    if (this.isFlagTrue(obj.IsReversed)) sx *= -1;
+    const sy = this.isFlagTrue(obj.IsVerticalReflected) ? -1 : 1;
+    return { angle, sx, sy };
+  },
+
+  applyLocalPose(dx, dy, pose) {
+    const qx = dx * pose.sx;
+    const qy = dy * pose.sy;
+    const rad = pose.angle * Math.PI / 180;
+    const c = Math.cos(rad);
+    const sn = Math.sin(rad);
+    return {
+      x: qx * c - qy * sn,
+      y: qx * sn + qy * c,
+    };
+  },
+
+  applyShapePose(shapeG, obj, template, anchor) {
+    if (this.isPipeLike(template)) return;
+    const pose = this.getObjectPose(obj);
+    const letter = this.getRenderer(template) === 'letter';
+    const sx = letter ? 1 : pose.sx;
+    const sy = letter ? 1 : pose.sy;
+    const angle = pose.angle;
+    if (!angle && sx === 1 && sy === 1) return;
+    const ax = anchor.x;
+    const ay = anchor.y;
+    shapeG.setAttribute('transform', `translate(${ax} ${ay}) rotate(${angle}) scale(${sx} ${sy}) translate(${-ax} ${-ay})`);
+  },
+
+  countRelativePoints(obj) {
+    let n = 0;
+    if (!obj.Points) return 0;
+    for (const block of obj.Points) {
+      if (!block.Point) continue;
+      n += block.Point.length;
+    }
+    return n;
+  },
+
+  renderInstPoints(g, obj) {
+    const pts = this.getAbsolutePoints(obj);
+    if (pts.length < 2 || this.countRelativePoints(obj) < 2) return;
+    const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'var(--pipe-fill)');
+    path.setAttribute('stroke-width', '1.2');
+    path.setAttribute('stroke-opacity', '0.55');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('pointer-events', 'none');
+    path.setAttribute('class', 'scheme-object__points');
+    g.appendChild(path);
   },
 
   symbolSize(base) {
@@ -642,10 +706,13 @@ const Renderer = {
     if (this.isPipeLike(template)) {
       this.renderPipe(shapeG, obj, template);
     } else if (renderer === 'letter') {
+      this.renderInstPoints(shapeG, obj);
       Symbols.drawLetter(shapeG, anchor, symbolCtx.scale, this.getLetterText(obj, template));
     } else {
+      this.renderInstPoints(shapeG, obj);
       Symbols.draw(shapeG, template, anchor, symbolCtx);
     }
+    this.applyShapePose(shapeG, obj, template, anchor);
     g.appendChild(shapeG);
 
     this.renderComplianceIndication(g, obj, template, anchor);
@@ -807,9 +874,36 @@ const Renderer = {
     }
     if (this.getRenderer(template) === 'letter') {
       const half = this.symbolSize(14);
-      return { x: anchor.x - half, y: anchor.y - half, width: half * 2, height: half * 2 };
+      return this.posedBounds(obj, template, anchor, {
+        x: anchor.x - half, y: anchor.y - half, width: half * 2, height: half * 2,
+      });
     }
-    return Symbols.getBounds(template, anchor, { scale: (n) => this.symbolSize(n) });
+    return this.posedBounds(obj, template, anchor, Symbols.getBounds(template, anchor, { scale: (n) => this.symbolSize(n) }));
+  },
+
+  posedBounds(obj, template, anchor, box) {
+    const pose = this.getObjectPose(obj);
+    const letter = this.getRenderer(template) === 'letter';
+    const sx = letter ? 1 : pose.sx;
+    const sy = letter ? 1 : pose.sy;
+    if (!pose.angle && sx === 1 && sy === 1) return box;
+    const corners = [
+      { x: box.x, y: box.y },
+      { x: box.x + box.width, y: box.y },
+      { x: box.x + box.width, y: box.y + box.height },
+      { x: box.x, y: box.y + box.height },
+    ];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const c of corners) {
+      const p = this.applyLocalPose(c.x - anchor.x, c.y - anchor.y, { angle: pose.angle, sx, sy });
+      const x = anchor.x + p.x;
+      const y = anchor.y + p.y;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   },
 
   polarToXY(cx, cy, r, deg) {
