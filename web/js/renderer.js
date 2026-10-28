@@ -243,6 +243,23 @@ const Renderer = {
     };
   },
 
+  drawInstIcon(g, template, anchor) {
+    const href = typeof InstIcons !== 'undefined' ? InstIcons.url(template) : '';
+    if (!href) return false;
+    const size = this.symbolSize(InstIcons.NATIVE_SIZE);
+    const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    img.setAttribute('href', href);
+    img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', href);
+    img.setAttribute('x', String(anchor.x - size / 2));
+    img.setAttribute('y', String(anchor.y - size / 2));
+    img.setAttribute('width', String(size));
+    img.setAttribute('height', String(size));
+    img.setAttribute('class', 'scheme-object__inst-icon');
+    img.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    g.appendChild(img);
+    return true;
+  },
+
   applyShapePose(shapeG, obj, template, anchor) {
     if (this.isPipeLike(template)) return;
     const pose = this.getObjectPose(obj);
@@ -710,7 +727,9 @@ const Renderer = {
       Symbols.drawLetter(shapeG, anchor, symbolCtx.scale, this.getLetterText(obj, template));
     } else {
       this.renderInstPoints(shapeG, obj);
-      Symbols.draw(shapeG, template, anchor, symbolCtx);
+      if (!this.drawInstIcon(shapeG, template, anchor)) {
+        Symbols.draw(shapeG, template, anchor, symbolCtx);
+      }
     }
     this.applyShapePose(shapeG, obj, template, anchor);
     g.appendChild(shapeG);
@@ -874,6 +893,12 @@ const Renderer = {
     }
     if (this.getRenderer(template) === 'letter') {
       const half = this.symbolSize(14);
+      return this.posedBounds(obj, template, anchor, {
+        x: anchor.x - half, y: anchor.y - half, width: half * 2, height: half * 2,
+      });
+    }
+    if (typeof InstIcons !== 'undefined' && InstIcons.url(template)) {
+      const half = this.symbolSize(InstIcons.NATIVE_SIZE) / 2;
       return this.posedBounds(obj, template, anchor, {
         x: anchor.x - half, y: anchor.y - half, width: half * 2, height: half * 2,
       });
