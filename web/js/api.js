@@ -571,6 +571,19 @@ const API = {
     });
   },
 
+  async markOriginalObject(solutionId, sessionId, payload) {
+    const r = await apiFetch(`/api/v1/solutions/${solutionId}/sessions/${sessionId}/mark-original`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || 'mark original failed');
+    }
+    return r.json();
+  },
+
   async patchDuplicateTag(solutionId, sessionId, payload) {
     const r = await apiFetch(`/api/v1/solutions/${solutionId}/sessions/${sessionId}/duplicate-tag-patch`, {
       method: 'POST',

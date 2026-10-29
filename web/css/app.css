@@ -1214,6 +1214,9 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#btnMarkOriginal {
+  margin-left: auto;
+}
 .props-duplicate-status {
   font-size: 12px;
   font-weight: 500;

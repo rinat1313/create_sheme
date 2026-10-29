@@ -60,6 +60,24 @@ type PatchDuplicateTagRequest struct {
 	NewTag      string `json:"new_tag"`
 }
 
+const originalObjectDefaultTag = "*"
+
+type MarkOriginalRequest struct {
+	ObjectID    string `json:"object_id"`
+	SchemeXMLID string `json:"scheme_xml_id"`
+}
+
+type MarkOriginalChanged struct {
+	ObjectID    string `json:"object_id"`
+	SchemeXMLID string `json:"scheme_xml_id"`
+}
+
+type MarkOriginalResult struct {
+	Tag          string                `json:"tag"`
+	ChangedCount int                   `json:"changed_count"`
+	Changed      []MarkOriginalChanged `json:"changed"`
+}
+
 func scopeLabel(scope string) string {
 	switch scope {
 	case "property":
@@ -1126,6 +1144,97 @@ func (s *SolutionService) PatchDuplicateTag(ctx context.Context, sessionID uuid.
 		s.enqueueDirtyAfterTagChange(ctx, solutionID, req.ObjectID, "patch_duplicate_tag")
 	}
 	return err
+}
+
+func graphicObjectMainTag(obj domain.GraphicObject) string {
+	var to *domain.TechnologyObject
+	if len(obj.TechnologyObject) > 0 {
+		to = &obj.TechnologyObject[0]
+	}
+	return strings.TrimSpace(resolveObjectField("Tag", &obj, to))
+}
+
+func (s *SolutionService) MarkOriginalObject(ctx context.Context, sessionID uuid.UUID, solutionID uuid.UUID, req MarkOriginalRequest) (result MarkOriginalResult, err error) {
+	start := time.Now()
+	defer func() {
+		slog.Info("MarkOriginalObject done",
+			"solution_id", solutionID,
+			"object_id", req.ObjectID,
+			"changed_count", result.ChangedCount,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"err", err,
+		)
+	}()
+	slog.Info("MarkOriginalObject start", "solution_id", solutionID, "object_id", req.ObjectID)
+
+	result.Tag = originalObjectDefaultTag
+	result.Changed = []MarkOriginalChanged{}
+	if req.SchemeXMLID == "" || req.ObjectID == "" {
+		err = fmt.Errorf("scheme_xml_id and object_id required")
+		return result, err
+	}
+
+	sol, err := s.loadSolution(ctx, solutionID)
+	if err != nil {
+		return result, err
+	}
+	changes, err := s.store.ListWorkingChanges(ctx, solutionID)
+	if err != nil {
+		return result, err
+	}
+	applyAllChanges(&sol, changes)
+	drafts, err := s.store.ListDraftChanges(ctx, sessionID)
+	if err != nil {
+		return result, err
+	}
+	applyAllChanges(&sol, drafts)
+
+	orig, ok := s.findGraphicObjectInSolution(sol, req.SchemeXMLID, req.ObjectID)
+	if !ok {
+		err = fmt.Errorf("object not found")
+		return result, err
+	}
+	key := graphicObjectMainTag(*orig)
+	if key == "" {
+		err = fmt.Errorf("main tag is empty")
+		return result, err
+	}
+
+	var siblings []MarkOriginalChanged
+	for _, project := range sol.Projects.Project {
+		for _, scheme := range project.GraphicScheme {
+			for i := range scheme.GraphicObject {
+				obj := scheme.GraphicObject[i]
+				if scheme.Id == req.SchemeXMLID && obj.Id == req.ObjectID {
+					continue
+				}
+				if graphicObjectMainTag(obj) != key {
+					continue
+				}
+				siblings = append(siblings, MarkOriginalChanged{ObjectID: obj.Id, SchemeXMLID: scheme.Id})
+			}
+		}
+	}
+
+	patchReq := PatchDuplicateTagRequest{Scope: "object"}
+	for _, sibling := range siblings {
+		patchReq.ObjectID = sibling.ObjectID
+		patchReq.SchemeXMLID = sibling.SchemeXMLID
+		if err = s.patchGraphicObjectTag(ctx, sessionID, solutionID, patchReq, originalObjectDefaultTag, &sol); err != nil {
+			return result, err
+		}
+		if err = s.store.UpsertSolutionChangedObject(ctx, solutionID, "graphic_object", sibling.ObjectID, sibling.SchemeXMLID); err != nil {
+			return result, err
+		}
+		s.enqueueDirtyAfterTagChange(ctx, solutionID, sibling.ObjectID, "mark_original")
+	}
+	if len(siblings) > 0 {
+		s.enqueueDirtyAfterTagChange(ctx, solutionID, req.ObjectID, "mark_original")
+	}
+
+	result.Changed = siblings
+	result.ChangedCount = len(siblings)
+	return result, nil
 }
 
 func (s *SolutionService) findGraphicObjectInSolution(sol domain.Solution, schemeXMLID, objectID string) (*domain.GraphicObject, bool) {

@@ -10,6 +10,7 @@ const Inspector = {
   pendingDuplicateRecheck: false,
   duplicateRecheckStatus: null,
   duplicateRecheckLoading: false,
+  markOriginalLoading: false,
   tagSnapshot: null,
   _pendingPatchPromise: null,
   sortState: {
@@ -33,6 +34,7 @@ const Inspector = {
     this.pendingDuplicateRecheck = false;
     this.duplicateRecheckStatus = null;
     this.duplicateRecheckLoading = false;
+    this.markOriginalLoading = false;
     this.tagSnapshot = null;
   },
 
@@ -99,16 +101,34 @@ const Inspector = {
     }
   },
 
+  hasMainTagDuplicates(objectId) {
+    return App.getMainTagDuplicateSiblings(objectId).length > 0;
+  },
+
   updateTitleRow(obj, to) {
     const statusEl = document.getElementById('propsDuplicateStatus');
     const btnEl = document.getElementById('btnRecheckDuplicates');
+    const originalBtn = document.getElementById('btnMarkOriginal');
+    const hideOriginal = () => {
+      if (!originalBtn) return;
+      originalBtn.hidden = true;
+      originalBtn.disabled = false;
+      originalBtn.textContent = 'Оригинальный объект';
+    };
     if (!obj) {
       this.title.textContent = 'Свойства';
       if (statusEl) statusEl.hidden = true;
       if (btnEl) btnEl.hidden = true;
+      hideOriginal();
       return;
     }
     this.title.textContent = to?.Name || obj.Name || 'Объект';
+    const showOriginal = this.hasMainTagDuplicates(obj.Id);
+    if (originalBtn) {
+      originalBtn.hidden = !showOriginal;
+      originalBtn.disabled = this.markOriginalLoading || this.duplicateRecheckLoading;
+      originalBtn.textContent = this.markOriginalLoading ? 'Применение…' : 'Оригинальный объект';
+    }
     if (!statusEl || !btnEl) return;
     if (this.pendingDuplicateRecheck && this.objectHadDuplicates) {
       btnEl.hidden = false;

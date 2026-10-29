@@ -662,6 +662,22 @@ func (a *API) handleSessions(w http.ResponseWriter, r *http.Request, solutionID 
 			return
 		}
 		writeJSON(w, map[string]string{"status": "ok"})
+	case "mark-original":
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req service.MarkOriginalRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		result, err := a.svc.MarkOriginalObject(r.Context(), sessionID, solutionID, req)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, result)
 	default:
 		http.NotFound(w, r)
 	}
