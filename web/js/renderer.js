@@ -96,6 +96,55 @@ const Renderer = {
     return true;
   },
 
+  objectBBox(svgEl, objectId) {
+    if (!svgEl || !objectId) return null;
+    const el = svgEl.querySelector(`[data-id="${CSS.escape(String(objectId))}"]`);
+    if (!el) return null;
+    try {
+      const bbox = el.getBBox();
+      return { x: bbox.x, y: bbox.y, w: bbox.width, h: bbox.height };
+    } catch (_) {
+      return null;
+    }
+  },
+
+  currentViewBox(svgEl) {
+    const vb = svgEl?.viewBox?.baseVal;
+    if (!vb) return null;
+    return { x: vb.x, y: vb.y, w: vb.width, h: vb.height };
+  },
+
+  objectBBoxInView(svgEl, objectId) {
+    const box = this.objectBBox(svgEl, objectId);
+    const view = this.currentViewBox(svgEl);
+    return LocatorGeom.bboxIntersectsViewBox(box, view);
+  },
+
+  clearLocatorArrows(svgEl) {
+    svgEl?.querySelector('#schemeLocatorArrows')?.remove();
+  },
+
+  showLocatorArrows(svgEl, objectId) {
+    this.clearLocatorArrows(svgEl);
+    if (!svgEl) return false;
+    const box = this.objectBBox(svgEl, objectId);
+    const polys = LocatorGeom.chevronPolygons(box);
+    if (!polys.length) return false;
+    const ns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns, 'g');
+    g.setAttribute('id', 'schemeLocatorArrows');
+    g.setAttribute('class', 'scheme-locator');
+    g.setAttribute('pointer-events', 'none');
+    for (const poly of polys) {
+      const el = document.createElementNS(ns, 'polygon');
+      el.setAttribute('class', 'scheme-locator__chevron');
+      el.setAttribute('points', poly.points.map((p) => p.join(',')).join(' '));
+      g.appendChild(el);
+    }
+    svgEl.appendChild(g);
+    return true;
+  },
+
   async loadDisplaySettings() {
     try {
       const settings = await API.getDisplaySettings();
@@ -1156,7 +1205,7 @@ const Renderer = {
 
   selectObject(svgEl, objectId) {
     svgEl.querySelectorAll('.scheme-object').forEach(el => el.classList.remove('scheme-object--selected'));
-    const el = svgEl.querySelector(`[data-id="${objectId}"]`);
+    const el = svgEl.querySelector(`[data-id="${CSS.escape(String(objectId))}"]`);
     if (el) el.classList.add('scheme-object--selected');
   },
 };

@@ -23,6 +23,9 @@ const App = {
   schemeMovementLocked: false,
   tagEditApplying: false,
   selectedObjectId: null,
+  locatorTimer: null,
+  _panGesture: { active: false, moved: false, startX: 0, startY: 0, lastX: 0, lastY: 0 },
+  _suppressSvgClick: false,
   objectSettings: {
     open: false,
     objectId: null,
@@ -213,10 +216,15 @@ const App = {
 
     const svg = document.getElementById('schemeSvg');
     svg.addEventListener('click', async () => {
+      if (this._suppressSvgClick) {
+        this._suppressSvgClick = false;
+        return;
+      }
       if (this.objectSettings.open) {
         const closed = await this.tryCloseObjectSettingsPanel();
         if (!closed) return;
       }
+      this.clearObjectLocator();
       svg.querySelectorAll('.scheme-object--selected').forEach(el => el.classList.remove('scheme-object--selected'));
       this.selectedObjectId = null;
       if (this.currentScheme) Inspector.showSchemeInfo(this.currentScheme);
@@ -606,6 +614,7 @@ const App = {
     document.getElementById('canvasStatusbar').hidden = true;
     document.getElementById('app').classList.remove('app--scheme-open', 'app--object-selected');
     this.selectedObjectId = null;
+    this.clearObjectLocator();
     if (this.objectSettings.open) this.forceCloseObjectSettingsPanel();
     await this.loadSolution();
   },
@@ -1385,6 +1394,7 @@ const App = {
     this.currentSchemeId = null;
     this.currentScheme = null;
     this.selectedObjectId = null;
+    this.clearObjectLocator();
     this.clearObjectCache();
 
     document.getElementById('schemeSvg').hidden = true;
@@ -1402,7 +1412,33 @@ const App = {
     }
   },
 
-  async selectObject(obj) {
+  clearObjectLocator() {
+    if (this.locatorTimer) {
+      clearTimeout(this.locatorTimer);
+      this.locatorTimer = null;
+    }
+    const svg = document.getElementById('schemeSvg');
+    Renderer.clearLocatorArrows(svg);
+  },
+
+  revealSelectedFromList(objectId) {
+    const svg = document.getElementById('schemeSvg');
+    if (!svg || svg.hidden || !objectId) return;
+    const run = () => {
+      if (!Renderer.objectBBoxInView(svg, objectId)) {
+        this.centerObjectInViewport(objectId);
+      }
+      Renderer.showLocatorArrows(svg, objectId);
+      if (this.locatorTimer) clearTimeout(this.locatorTimer);
+      this.locatorTimer = setTimeout(() => {
+        Renderer.clearLocatorArrows(svg);
+        this.locatorTimer = null;
+      }, 2000);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(run));
+  },
+
+  async selectObject(obj, options = {}) {
     const template = Renderer.getTemplate(obj);
     if (!Renderer.canInteractWithObject(template)) return;
 
@@ -1413,6 +1449,7 @@ const App = {
         Inspector.loadObject(this.solutionId, obj.Id);
         this.selectedObjectId = obj.Id;
         document.getElementById('app').classList.add('app--object-selected');
+        if (options.fromList) this.revealSelectedFromList(obj.Id);
         return;
       }
       if (panel.template === template) {
@@ -1449,6 +1486,7 @@ const App = {
     Inspector.loadObject(this.solutionId, obj.Id);
     this.selectedObjectId = obj.Id;
     document.getElementById('app').classList.add('app--object-selected');
+    if (options.fromList) this.revealSelectedFromList(obj.Id);
   },
 
   async patchObject(objectId, patch, options = {}) {
@@ -1706,24 +1744,42 @@ const App = {
 
   setupPanZoom(svg) {
     const viewport = document.getElementById('canvasViewport');
-    let panning = false, startX, startY;
+    const panPx = 4;
 
     viewport.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
       if (e.target.closest('.scheme-object')) return;
-      panning = true;
-      startX = e.clientX;
-      startY = e.clientY;
+      this._panGesture = {
+        active: true,
+        moved: false,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+      };
     });
     window.addEventListener('mousemove', (e) => {
-      if (!panning) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      startX = e.clientX;
-      startY = e.clientY;
+      const g = this._panGesture;
+      if (!g.active) return;
+      const dist = Math.hypot(e.clientX - g.startX, e.clientY - g.startY);
+      if (!g.moved && dist < panPx) return;
+      if (!g.moved) {
+        g.moved = true;
+        g.lastX = e.clientX;
+        g.lastY = e.clientY;
+      }
+      const dx = e.clientX - g.lastX;
+      const dy = e.clientY - g.lastY;
+      g.lastX = e.clientX;
+      g.lastY = e.clientY;
       Renderer.panViewBox(svg, dx, dy);
       this.applyTransform();
     });
-    window.addEventListener('mouseup', () => { panning = false; });
+    window.addEventListener('mouseup', () => {
+      if (this._panGesture.moved) this._suppressSvgClick = true;
+      this._panGesture.active = false;
+      this._panGesture.moved = false;
+    });
 
     viewport.addEventListener('wheel', (e) => {
       e.preventDefault();
@@ -3310,7 +3366,7 @@ const App = {
     const obj = this.currentScheme?.GraphicObject?.find(o => o.Id === row.object_id);
     if (obj) {
       Inspector.syncActiveTabFromDom();
-      this.selectObject(obj);
+      await this.selectObject(obj, { fromList: true });
     }
   },
 
@@ -3536,8 +3592,7 @@ const App = {
     const obj = this.currentScheme?.GraphicObject?.find(o => o.Id === row.object_id);
     if (obj) {
       Inspector.syncActiveTabFromDom();
-      await this.selectObject(obj);
-      this.centerObjectInViewport(row.object_id);
+      await this.selectObject(obj, { fromList: true });
     }
   },
 
@@ -3699,7 +3754,7 @@ const App = {
         <span class="duplicate-panel__item-meta">${this.escapeHtml(row.technology_object_id || '—')}</span>`;
       item.addEventListener('click', () => {
         const obj = this.currentScheme?.GraphicObject?.find(o => o.Id === row.object_id);
-        if (obj) this.selectObject(obj);
+        if (obj) this.selectObject(obj, { fromList: true });
       });
       body.appendChild(item);
     }
@@ -4912,7 +4967,7 @@ const App = {
           <li>Дерево слева показывает проекты и схемы загруженного решения. Клик по схеме открывает её на холсте.</li>
           <li>Кнопка <strong>⌕</strong> в заголовке обозревателя открывает или скрывает панель поиска. Состояние панели запоминается.</li>
           <li>В поиске можно искать по имени, Tag, Id и типу объекта. Id в таблице — технологический Id, как во вкладке «Основные» (если пусто — «—»). Введите запрос (не короче 2 символов; короткий запрос ищет только по Id графического или технологического объекта) — таблица покажет тип, название, Id, project и схему без повторов.</li>
-          <li>Клик по строке открывает нужную схему и выделяет объект; если схема уже открыта, она не перезагружается, объект перемещается в центр экрана.</li>
+          <li>Клик по строке открывает нужную схему и выделяет объект; если схема уже открыта, она не перезагружается. Если объект не виден в кадре — схема сдвигается к нему. На две секунды вокруг объекта появляются четыре стрелки (сверху, снизу и по бокам); повторный клик по строке показывает их снова. Клик по объекту на самой схеме стрелок не запускает.</li>
           <li>Индекс поиска обновляется при последнем сохранении или импорте решения. Несохранённые правки на открытой схеме (draft) в поиске не отражаются.</li>
         </ul>
       </section>
@@ -4924,7 +4979,7 @@ const App = {
           <li><strong>⚠ Проверки</strong> — порядок полей: Тип объекта → Область → Параметр → Атрибут параметра → Условие текста → Текст → Пустое поле → Индикация → Цвет → Период. Область задаёт список Параметра (Основные, Характеристики, Команды, Защиты); при нарушении объект подсвечивается на схеме. Условие текста: «Должен / Не должен содержать» — по вхождению; «Строгое соответствие» — значение должно быть равно тексту; «Не должен совпадать строго» — нарушение, если значение ровно равно тексту (подсветка объекта). Списки параметров берутся из каталога решения и на повторных открытиях загружаются быстро. Если список не загрузился, нажмите <strong>⟳ Повторить</strong> рядом с полем «Параметр». Надпись «Нет вариантов» означает, что для выбранного типа объекта и области список пуст.</li>
           <li><strong>🏷 Редактирование TAG</strong> — правила сверху вниз. После типа объекта выбираете, что проверять (как в «Проверках»: основные характеристики, характеристики, команды, защиты и конкретное поле). Условие: содержит / начинается / заканчивается / «Пустое поле» — тогда «Текст» скрыт. Галки «Непустой Tag в блоках»: объект в выборке, только если во всех отмеченных блоках есть непустой Tag. Затем одно или несколько действий: какое поле менять, «Очистить» (без «Заменить на») или «Заменить» («Заменить на» и способ: найденное / вся строка / первое / все / последнее совпадение). Экспорт и импорт — читаемый JSON правил. «Применить» держит оверлей до конца. Изменения — «● Несохранено» и «Выгрузить объекты → Только изменённые».</li>
           <li><strong>Выгрузить объекты</strong> — таблица CSV/JSON по выбранным полям; можно выгрузить только изменённые объекты и настроить порядок колонок. В параметрах можно включить колонку <strong>Template</strong> (тип объекта); select «Тип объекта» сверху — фильтр строк, его можно сочетать с «только изменённые» (AND). В строке Tag (или отдельно, если Tag снят) — фильтр: Все / Только непустые / Только пустые (по умолчанию — только непустые). Рядом с «Только изменённые объекты» — кнопка <strong>Обнуление данных по изменённым объектам</strong>: скрывает учтённые изменения из счётчика и фильтра «только изменённые», не удаляя правки в решении. Сохранение решения список и счётчик не сбрасывает — сброс только этой кнопкой.</li>
-          <li><strong>Дубликаты</strong> — поиск одинаковых Tag по основным параметрам, характеристикам, командам и защитам. В таблице, на вкладке «Дубликаты» инспектора и в плавающей панели колонка Id — технологический Id объекта (как во вкладке «Основные»); если пусто — «—»; навигация по строке использует системный ключ графического объекта. В настройках: области поиска (Основные / Характеристики / Команды / Защиты — отмеченные участвуют в поиске) и исключения Tag (несколько условий через ИЛИ; подходящие Tag не участвуют в поиске). Типы исключения: «Содержит символ» — символ встречается в Tag; «Содержит текст» — фрагмент встречается в Tag; «Содержит один символ» — Tag целиком равен одному заданному символу (например «.» исключает только Tag «.», а не «тест.это.тест»); «Первый символ» — первый символ Tag равен заданному. «Начать поиск» — полный принудительный проход с оверлеем; на больших решениях может занять заметное время — дождитесь окончания по оверлею. «Поиск в фоне» — щадящий фоновый сканер без оверлея: сначала весь проект, затем только изменения; найденные дубликаты появляются в таблице по мере сканирования. Обычный и фоновый поиск взаимно блокируются. Смена областей поиска и исключений Tag сохраняется при запуске поиска или включении фона и требует полного пересчёта. После поиска блок «Выгрузка дубликатов Tag»: формат CSV (разделитель «;» и строка заголовка), TXT (колонки через табуляцию) или XML (корень duplicates, строки row, выбранные колонки — теги); отметьте колонки отчёта (Tag, Id, Имя, Тип, Область, Параметр, Схема; по умолчанию все включены) и нажмите <strong>Выгрузить</strong> — скачивается файл UTF-8 со всеми строками текущей таблицы. Без результатов поиска кнопка недоступна. Результаты поиска сохраняются и после обновления страницы снова видны на схемах и в обозревателе; полный пересчёт — только повторным запуском поиска (или фоном, если включён).</li>
+          <li><strong>Дубликаты</strong> — поиск одинаковых Tag по основным параметрам, характеристикам, командам и защитам. Клик по строке в таблице, на вкладке инспектора или в плавающей панели выделяет объект на схеме и на две секунды показывает четыре стрелки вокруг него. В таблице, на вкладке «Дубликаты» инспектора и в плавающей панели колонка Id — технологический Id объекта (как во вкладке «Основные»); если пусто — «—»; навигация по строке использует системный ключ графического объекта. В настройках: области поиска (Основные / Характеристики / Команды / Защиты — отмеченные участвуют в поиске) и исключения Tag (несколько условий через ИЛИ; подходящие Tag не участвуют в поиске). Типы исключения: «Содержит символ» — символ встречается в Tag; «Содержит текст» — фрагмент встречается в Tag; «Содержит один символ» — Tag целиком равен одному заданному символу (например «.» исключает только Tag «.», а не «тест.это.тест»); «Первый символ» — первый символ Tag равен заданному. «Начать поиск» — полный принудительный проход с оверлеем; на больших решениях может занять заметное время — дождитесь окончания по оверлею. «Поиск в фоне» — щадящий фоновый сканер без оверлея: сначала весь проект, затем только изменения; найденные дубликаты появляются в таблице по мере сканирования. Обычный и фоновый поиск взаимно блокируются. Смена областей поиска и исключений Tag сохраняется при запуске поиска или включении фона и требует полного пересчёта. После поиска блок «Выгрузка дубликатов Tag»: формат CSV (разделитель «;» и строка заголовка), TXT (колонки через табуляцию) или XML (корень duplicates, строки row, выбранные колонки — теги); отметьте колонки отчёта (Tag, Id, Имя, Тип, Область, Параметр, Схема; по умолчанию все включены) и нажмите <strong>Выгрузить</strong> — скачивается файл UTF-8 со всеми строками текущей таблицы. Без результатов поиска кнопка недоступна. Результаты поиска сохраняются и после обновления страницы снова видны на схемах и в обозревателе; полный пересчёт — только повторным запуском поиска (или фоном, если включён).</li>
           <li><strong>Сохранить</strong> — записать правки из буфера сессии в решение. Открытая схема после успеха остаётся открытой (перечитывается с сервера). Во время сохранения интерфейс блокируется оверлеем с процентом и оценкой оставшегося времени; успех показывается на оверлее без отдельного окна, при ошибке правки остаются несохранёнными.</li>
           <li><strong>Выгрузить XML</strong> — полный Solution.xml с учётом несохранённых рабочих изменений.</li>
         </ul>
@@ -4941,7 +4996,8 @@ const App = {
           <li><strong>+ / − / Fit</strong> — масштаб и обзор всей схемы.</li>
           <li><strong>🔓 Движение</strong> — отдельный режим холста: при активном режиме можно выбирать и перетаскивать трубы, мосты и перемычки; при блокировке режима — только оборудование. Не путать с блокировкой объекта в решении (<code>IsLocked</code>).</li>
           <li>Клик по объекту открывает панель свойств справа (Основные, Характеристики, Команды, Защиты). Во вкладках можно править свойства и сохранять как обычно — в том числе у объектов, заблокированных на перемещение в решении. У таких объектов на схеме перетаскивание недоступно; во вкладке «Основные» поля X, Y и Angle только для просмотра. Во вкладке «Основные» после типа показывается Id технологического объекта из solution.xml; id графического объекта не показывается. Подписи на схеме и выгрузка по полю Id используют тот же технологический Id (если пусто — поле не заполняется / «—»). Правки полей живут в буфере сессии: при переключении схем они не пропадают; «Сохранить» записывает их в решение.</li>
-          <li>Перетаскивание фона — панорамирование; колёсико мыши — масштаб к курсору.</li>
+          <li>Строка в Поиске, в таблице Дубликатов, на вкладке «Дубликаты» инспектора или в плавающей панели дубликатов выделяет объект и на две секунды ставит четыре стрелки вокруг него. Если объекта нет в кадре, схема сначала сдвигается к нему.</li>
+          <li>Перетаскивание фона (зажать и сдвинуть) — панорамирование, выбранный объект остаётся выбранным. Короткий клик по пустому месту схемы снимает выбор. Колёсико мыши — масштаб к курсору.</li>
           <li><strong>Drop из WinCC OA</strong> — перетащите текст datapoint из WinCC OA 3.17 на объект схемы: в Tag запишется имя DP. На editable поле инспектора — значение вставится в это поле. Формат: <code>prefix:DP.rest</code> → берётся <code>DP</code> (часть после первого <code>:</code> до первой <code>.</code>). Неверный формат игнорируется.</li>
         </ul>
       </section>

@@ -737,6 +737,24 @@ body {
   stroke-width: var(--selection-stroke-width);
   vector-effect: non-scaling-stroke;
 }
+.scheme-locator {
+  pointer-events: none;
+}
+.scheme-locator__chevron {
+  fill: var(--border-focus);
+  stroke: var(--selection-stroke);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: scheme-locator-pulse 2s ease-out forwards;
+}
+@keyframes scheme-locator-pulse {
+  0% { opacity: 0; transform: scale(0.86); }
+  12% { opacity: 1; transform: scale(1.08); }
+  75% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
 .scheme-object--drop-target .scheme-object__hit {
   stroke: var(--border-focus);
   stroke-width: 2;
