@@ -401,6 +401,58 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.explorer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.explorer-filter {
+  position: relative;
+}
+.explorer-filter__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 240px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.explorer-filter__menu[hidden] {
+  display: none !important;
+}
+.explorer-filter__title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.explorer-filter__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.explorer-filter__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+.tree-node__filter-check {
+  margin: 0 4px 0 0;
+  flex-shrink: 0;
+}
+.tree-filter-empty {
+  padding: 12px;
+}
 
 .solution-search {
   display: flex;

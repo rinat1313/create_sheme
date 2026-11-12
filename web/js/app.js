@@ -121,6 +121,7 @@ const App = {
     this.duplicatePanelCollapsed = localStorage.getItem('duplicatePanelCollapsed') === 'true';
     this.initTheme();
     this.initSolutionSearch();
+    this.initTreeFilter();
 
     const helpModal = document.getElementById('helpModal');
     const displayModal = document.getElementById('displayModal');
@@ -840,6 +841,7 @@ const App = {
     Explorer.setComplianceHints([]);
     this.lastTree = tree;
     Explorer.render(tree);
+    await this.loadTreeFilter();
     Inspector.showSolutionMeta(meta);
     this.setDirty(meta.is_dirty);
     this.updateSolutionSearchEnabled();
@@ -3401,6 +3403,107 @@ const App = {
     }
   },
 
+  initTreeFilter() {
+    const wrap = document.getElementById('explorerFilter');
+    const btn = document.getElementById('btnToggleTreeFilter');
+    const panel = document.getElementById('treeFilterPanel');
+    if (!wrap || !btn || !panel) return;
+    this.treeFilter = { mode: 'all', node_xml_ids: [] };
+    this.treeFilterOpen = false;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.setTreeFilterOpen(!this.treeFilterOpen);
+    });
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    panel.querySelectorAll('input[name="treeFilterMode"]').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        this.treeFilter.mode = input.value;
+        this.applyTreeFilter();
+        this.saveTreeFilter();
+      });
+    });
+    document.addEventListener('click', () => {
+      if (this.treeFilterOpen) this.setTreeFilterOpen(false);
+    });
+  },
+
+  setTreeFilterOpen(open) {
+    this.treeFilterOpen = !!open;
+    const btn = document.getElementById('btnToggleTreeFilter');
+    const panel = document.getElementById('treeFilterPanel');
+    if (btn) {
+      btn.setAttribute('aria-expanded', String(this.treeFilterOpen));
+      const active = this.treeFilterOpen || (this.treeFilter && this.treeFilter.mode !== 'all');
+      btn.classList.toggle('btn--active', active);
+    }
+    if (panel) panel.hidden = !this.treeFilterOpen;
+    this.applyTreeFilter();
+  },
+
+  syncTreeFilterRadios() {
+    const mode = this.treeFilter?.mode || 'all';
+    document.querySelectorAll('input[name="treeFilterMode"]').forEach((input) => {
+      input.checked = input.value === mode;
+    });
+  },
+
+  applyTreeFilter() {
+    const mode = this.treeFilter?.mode || 'all';
+    const ids = this.treeFilter?.node_xml_ids || [];
+    const picking = this.treeFilterOpen && mode !== 'all';
+    Explorer.setTreeFilter(mode, ids, picking);
+    const btn = document.getElementById('btnToggleTreeFilter');
+    if (btn) btn.classList.toggle('btn--active', this.treeFilterOpen || mode !== 'all');
+    if (this.solutionSearchQuery) {
+      this.runSolutionSearch(this.solutionSearchQuery, { immediate: true });
+    }
+  },
+
+  async loadTreeFilter() {
+    if (!this.solutionId) return;
+    try {
+      const filter = await API.getTreeFilter(this.solutionId);
+      this.treeFilter = {
+        mode: filter.mode || 'all',
+        node_xml_ids: Array.isArray(filter.node_xml_ids) ? filter.node_xml_ids : [],
+      };
+    } catch (_) {
+      this.treeFilter = { mode: 'all', node_xml_ids: [] };
+    }
+    this.syncTreeFilterRadios();
+    this.applyTreeFilter();
+  },
+
+  saveTreeFilter() {
+    if (!this.solutionId) return;
+    if (this.treeFilterSaveTimer) clearTimeout(this.treeFilterSaveTimer);
+    this.treeFilterSaveTimer = setTimeout(async () => {
+      try {
+        await API.putTreeFilter(this.solutionId, {
+          mode: this.treeFilter.mode || 'all',
+          node_xml_ids: this.treeFilter.node_xml_ids || [],
+        });
+      } catch (_) {}
+    }, 300);
+  },
+
+  onTreeFilterToggle(xmlId, checked) {
+    if (!xmlId) return;
+    const ids = new Set(this.treeFilter.node_xml_ids || []);
+    if (checked) ids.add(xmlId);
+    else ids.delete(xmlId);
+    this.treeFilter.node_xml_ids = Array.from(ids);
+    this.applyTreeFilter();
+    this.saveTreeFilter();
+  },
+
+  isSearchRowVisible(row) {
+    if (!row) return false;
+    if (!this.treeFilter || this.treeFilter.mode === 'all') return true;
+    return Explorer.isXmlVisible(row.scheme_xml_id) || Explorer.isXmlVisible(row.project_xml_id);
+  },
+
   initSolutionSearch() {
     const panel = document.getElementById('solutionSearchPanel');
     const toggleBtn = document.getElementById('btnToggleSolutionSearch');
@@ -3462,6 +3565,8 @@ const App = {
     const enabled = Boolean(this.solutionId);
     if (input) input.disabled = !enabled;
     if (toggleBtn) toggleBtn.disabled = !enabled;
+    const filterBtn = document.getElementById('btnToggleTreeFilter');
+    if (filterBtn) filterBtn.disabled = !enabled;
     if (!enabled) {
       this.clearSolutionSearch({ keepFocus: false });
       this.renderSolutionSearchState('empty');
@@ -3520,12 +3625,15 @@ const App = {
         const result = await API.searchSolution(this.solutionId, query, { limit: 50, offset: 0 });
         if (reqId !== this.solutionSearchReq) return;
         this.solutionSearchQuery = result.query || query;
-        this.solutionSearchItems = Array.isArray(result.items) ? result.items : [];
+        const rawItems = Array.isArray(result.items) ? result.items : [];
+        this.solutionSearchItems = rawItems.filter((row) => this.isSearchRowVisible(row));
+        const visibleTotal = this.solutionSearchItems.length;
+        const payload = { ...result, items: this.solutionSearchItems, total: visibleTotal };
         if (!this.solutionSearchItems.length) {
-          this.renderSolutionSearchState('zero', result);
+          this.renderSolutionSearchState('zero', payload);
           return;
         }
-        this.renderSolutionSearchState('success', result);
+        this.renderSolutionSearchState('success', payload);
       } catch (err) {
         if (reqId !== this.solutionSearchReq) return;
         this.renderSolutionSearchState('error', { error: err.message || 'Ошибка поиска' });
@@ -5034,8 +5142,9 @@ const App = {
         <h4>Обозреватель и поиск</h4>
         <ul class="help-list">
           <li>Дерево слева показывает проекты и схемы загруженного решения. Клик по схеме открывает её на холсте.</li>
+          <li>Кнопка фильтра в заголовке обозревателя (рядом с поиском) задаёт видимость дерева: все схемы, выбранные схемы или выбранные Projects и папки. Отметка узла включает всё вложенное. Пока меню открыто, дерево видно целиком, чтобы ставить отметки; после закрытия остаются выбранные узлы. Настройка сохраняется для текущего пользователя и этого решения. Пустой выбор даёт пустое дерево. Рабочие пространства в режимах «выбранные» скрыты. Дубликаты, проверки и уже открытая схема фильтр не сужает.</li>
           <li>Кнопка <strong>⌕</strong> в заголовке обозревателя открывает или скрывает панель поиска. Состояние панели запоминается.</li>
-          <li>В поиске можно искать по имени, Tag, Id и типу объекта. Id в таблице — технологический Id, как во вкладке «Основные» (если пусто — «—»). Введите запрос (не короче 2 символов; короткий запрос ищет только по Id графического или технологического объекта) — таблица покажет тип, название, Id, project и схему без повторов.</li>
+          <li>В поиске можно искать по имени, Tag, Id и типу объекта. Id в таблице — технологический Id, как во вкладке «Основные» (если пусто — «—»). Введите запрос (не короче 2 символов; короткий запрос ищет только по Id графического или технологического объекта) — таблица покажет тип, название, Id, project и схему без повторов. При включённом фильтре дерева в выдаче только объекты видимых схем и проектов.</li>
           <li>Клик по строке открывает нужную схему и выделяет объект; если схема уже открыта, она не перезагружается. Если объект не виден в кадре — схема сдвигается к нему. На две секунды вокруг объекта появляются четыре стрелки (сверху, снизу и по бокам); повторный клик по строке показывает их снова. Клик по объекту на самой схеме стрелок не запускает.</li>
           <li>Индекс поиска обновляется при последнем сохранении или импорте решения. Несохранённые правки на открытой схеме в поиске не отражаются.</li>
         </ul>

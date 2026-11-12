@@ -158,6 +158,27 @@ const API = {
     return this.getTree(solutionId, { project_xml_id: projectXmlId });
   },
 
+  async getTreeFilter(solutionId) {
+    const r = await apiFetch(`/api/v1/solutions/${solutionId}/tree-filter`);
+    if (!r.ok) {
+      return { mode: 'all', node_xml_ids: [] };
+    }
+    return r.json();
+  },
+
+  async putTreeFilter(solutionId, filter) {
+    const r = await apiFetch(`/api/v1/solutions/${solutionId}/tree-filter`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(filter),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'tree filter save failed');
+    }
+    return r.json();
+  },
+
   async getSolutionTemplates(solutionId) {
     const r = await apiFetch(`/api/v1/solutions/${solutionId}/templates`);
     if (!r.ok) return [];

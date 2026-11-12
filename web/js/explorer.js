@@ -6,6 +6,13 @@ const Explorer = {
   complianceHints: {},
   loadedProjects: new Set(),
   solutionId: null,
+  filterMode: 'all',
+  selectedIds: new Set(),
+  picking: false,
+  parentOf: {},
+  typeOf: {},
+  branchOf: {},
+  emptyHint: null,
 
   init(container, footer, onSchemeSelect) {
     this.container = container;
@@ -16,6 +23,136 @@ const Explorer = {
   setSolutionId(id) {
     this.solutionId = id;
     this.loadedProjects.clear();
+    this.parentOf = {};
+    this.typeOf = {};
+    this.branchOf = {};
+  },
+
+  setTreeFilter(mode, ids, picking) {
+    this.filterMode = mode || 'all';
+    this.selectedIds = new Set(ids || []);
+    this.picking = !!picking;
+    this.applyVisibility();
+  },
+
+  nodeBranch(node, parentBranch) {
+    if (node.type === 'workspace' || node.type === 'object_reference') return 'workspaces';
+    if (parentBranch) return parentBranch;
+    if (node.type === 'folder' && (node.children || []).some((c) => c.type === 'workspace')) {
+      return 'workspaces';
+    }
+    if (node.type === 'folder' || node.type === 'project' || node.type === 'graphic_scheme') {
+      return 'projects';
+    }
+    return '';
+  },
+
+  indexNode(node, parentXmlId, branch) {
+    if (!node?.xml_id) return;
+    this.parentOf[node.xml_id] = parentXmlId || '';
+    this.typeOf[node.xml_id] = node.type;
+    this.branchOf[node.xml_id] = branch || '';
+  },
+
+  isXmlVisible(xmlId) {
+    if (this.filterMode === 'all' || this.picking) return true;
+    if (!xmlId) return false;
+    if (this.branchOf[xmlId] === 'workspaces') return false;
+    if (!this.selectedIds.size) return false;
+    const seen = new Set();
+    let cur = xmlId;
+    while (cur && !seen.has(cur)) {
+      if (this.selectedIds.has(cur)) return true;
+      seen.add(cur);
+      cur = this.parentOf[cur] || (typeof App !== 'undefined' && App.schemeProjectMap && App.schemeProjectMap[cur]) || (typeof App !== 'undefined' && App.projectFolderMap && App.projectFolderMap[cur]) || '';
+    }
+    for (const sel of this.selectedIds) {
+      const walk = new Set();
+      let p = this.parentOf[sel] || (typeof App !== 'undefined' && App.schemeProjectMap && App.schemeProjectMap[sel]) || (typeof App !== 'undefined' && App.projectFolderMap && App.projectFolderMap[sel]) || '';
+      while (p && !walk.has(p)) {
+        if (p === xmlId) return true;
+        walk.add(p);
+        p = this.parentOf[p] || (typeof App !== 'undefined' && App.schemeProjectMap && App.schemeProjectMap[p]) || (typeof App !== 'undefined' && App.projectFolderMap && App.projectFolderMap[p]) || '';
+      }
+    }
+    return false;
+  },
+
+  isSelectable(type, branch) {
+    if (this.filterMode === 'all') return false;
+    if (branch === 'workspaces') return false;
+    if (type === 'solution') return false;
+    if (this.filterMode === 'schemes') {
+      return type === 'folder' || type === 'project' || type === 'graphic_scheme';
+    }
+    if (this.filterMode === 'projects') {
+      return type === 'folder' || type === 'project';
+    }
+    return false;
+  },
+
+  applyVisibility() {
+    if (!this.container) return;
+    let visibleCount = 0;
+    this.container.querySelectorAll(':scope > ul.tree > li, ul.tree-node__children > li').forEach((li) => {
+      const div = li.querySelector(':scope > .tree-node');
+      if (!div) return;
+      const xmlId = div.dataset.xmlId;
+      const type = div.dataset.type;
+      const branch = div.dataset.branch || this.branchOf[xmlId] || '';
+      const show = this.isXmlVisible(xmlId) || (type === 'solution' && this.hasVisibleDescendant(li));
+      li.hidden = !show && !this.picking;
+      if (!li.hidden) visibleCount += 1;
+      this.syncCheckbox(div, xmlId, type, branch);
+    });
+    this.syncEmptyHint(visibleCount === 0 && this.filterMode !== 'all' && !this.picking);
+  },
+
+  hasVisibleDescendant(li) {
+    const kids = li.querySelectorAll('.tree-node');
+    for (const el of kids) {
+      if (el === li.querySelector(':scope > .tree-node')) continue;
+      if (this.isXmlVisible(el.dataset.xmlId)) return true;
+    }
+    return false;
+  },
+
+  syncEmptyHint(show) {
+    if (!this.container) return;
+    if (!this.emptyHint) {
+      this.emptyHint = document.createElement('p');
+      this.emptyHint.className = 'props-empty tree-filter-empty';
+      this.emptyHint.textContent = 'Нет выбранных узлов. Смените фильтр в шапке обозревателя или отметьте папку либо схему.';
+    }
+    if (show) {
+      if (!this.emptyHint.isConnected) this.container.appendChild(this.emptyHint);
+      this.emptyHint.hidden = false;
+    } else if (this.emptyHint.isConnected) {
+      this.emptyHint.hidden = true;
+    }
+  },
+
+  syncCheckbox(div, xmlId, type, branch) {
+    let box = div.querySelector('.tree-node__filter-check');
+    const need = this.picking && this.isSelectable(type, branch);
+    if (!need) {
+      if (box) box.remove();
+      return;
+    }
+    if (!box) {
+      box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'tree-node__filter-check';
+      box.addEventListener('click', (e) => e.stopPropagation());
+      box.addEventListener('change', (e) => {
+        e.stopPropagation();
+        if (typeof App !== 'undefined' && App.onTreeFilterToggle) {
+          App.onTreeFilterToggle(xmlId, box.checked);
+        }
+      });
+      div.insertBefore(box, div.querySelector('.tree-node__icon'));
+    }
+    box.checked = this.selectedIds.has(xmlId);
   },
 
   setComplianceHints(hints) {
@@ -78,14 +215,18 @@ const Explorer = {
 
   render(tree) {
     this.collapsedNodes.clear();
+    this.parentOf = {};
+    this.typeOf = {};
+    this.branchOf = {};
     this.container.innerHTML = '';
     const ul = document.createElement('ul');
     ul.className = 'tree';
     for (const node of tree) {
-      ul.appendChild(this.renderNode(node, 0));
+      ul.appendChild(this.renderNode(node, 0, '', ''));
     }
     this.container.appendChild(ul);
     this.applyComplianceToTree();
+    this.applyVisibility();
   },
 
   isCollapsible(node) {
@@ -112,13 +253,15 @@ const Explorer = {
         node.children = children;
         this.loadedProjects.add(node.xml_id);
         childUl.innerHTML = '';
+        const branch = this.branchOf[node.xml_id] || 'projects';
         for (const child of children) {
-          childUl.appendChild(this.renderNode(child, 0));
+          childUl.appendChild(this.renderNode(child, 0, node.xml_id, branch));
         }
         if (App.onProjectSchemesLoaded) {
           App.onProjectSchemesLoaded(node.xml_id, children);
         }
         this.applyComplianceToTree();
+        this.applyVisibility();
         if (App.refreshComplianceForProject) {
           await App.refreshComplianceForProject(node.xml_id);
         }
@@ -136,7 +279,7 @@ const Explorer = {
     }
   },
 
-  renderNode(node, depth) {
+  renderNode(node, depth, parentXmlId, parentBranch) {
     const li = document.createElement('li');
     const icons = {
       solution: '📋', folder: '📁', project: '🏭',
@@ -146,11 +289,14 @@ const Explorer = {
     const collapsible = this.isCollapsible(node) || node.type === 'project';
     const collapsed = collapsible && this.isCollapsed(node);
     const hint = this.complianceHints[node.xml_id];
+    const branch = this.nodeBranch(node, parentBranch);
+    this.indexNode(node, parentXmlId, branch);
 
     const div = document.createElement('div');
     div.className = `tree-node tree-node--${node.type}`;
     div.dataset.xmlId = node.xml_id;
     div.dataset.type = node.type;
+    div.dataset.branch = branch;
     if (hint && hint.indicators && hint.indicators.length > 0) {
       div.classList.add('tree-node--violation');
       div.style.setProperty('--violation-color', hint.indicators[0].color || '#F85149');
@@ -212,7 +358,7 @@ const Explorer = {
       childUl.className = 'tree-node__children' + (collapsed ? ' tree-node__children--collapsed' : '');
       if (hasChildren) {
         for (const child of node.children) {
-          childUl.appendChild(this.renderNode(child, depth + 1));
+          childUl.appendChild(this.renderNode(child, depth + 1, node.xml_id, branch));
         }
       }
       li.appendChild(childUl);

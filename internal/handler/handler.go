@@ -382,6 +382,8 @@ func (a *API) handleSolutionSub(w http.ResponseWriter, r *http.Request) {
 		a.getComplianceReport(w, r, solutionID)
 	case "search":
 		a.searchSolution(w, r, solutionID)
+	case "tree-filter":
+		a.handleTreeFilter(w, r, solutionID)
 	case "tag-edit":
 		a.handleTagEdit(w, r, solutionID, parts[2:])
 	case "compliance-duplicate-scan":
@@ -1364,6 +1366,43 @@ func (a *API) handleComplianceDuplicateBackground(w http.ResponseWriter, r *http
 			return
 		}
 		writeJSON(w, status)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (a *API) handleTreeFilter(w http.ResponseWriter, r *http.Request, solutionID uuid.UUID) {
+	start := time.Now()
+	defer func() {
+		slog.Info("handleTreeFilter done", "solution_id", solutionID, "method", r.Method, "duration_ms", time.Since(start).Milliseconds())
+	}()
+	slog.Debug("handleTreeFilter start", "solution_id", solutionID, "method", r.Method)
+
+	userID := service.UserIDFromContext(r.Context())
+	switch r.Method {
+	case http.MethodGet:
+		filter, err := a.svc.GetTreeFilter(r.Context(), userID, solutionID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, filter)
+	case http.MethodPut:
+		var body service.TreeFilter
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		filter, err := a.svc.PutTreeFilter(r.Context(), userID, solutionID, body.Mode, body.NodeXMLIDs)
+		if err != nil {
+			if errors.Is(err, service.ErrInvalidTreeFilterMode) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, filter)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
