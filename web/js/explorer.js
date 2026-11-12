@@ -83,10 +83,7 @@ const Explorer = {
     if (branch === 'workspaces') return false;
     if (type === 'solution') return false;
     if (this.filterMode === 'schemes') {
-      return type === 'folder' || type === 'project' || type === 'graphic_scheme';
-    }
-    if (this.filterMode === 'projects') {
-      return type === 'folder' || type === 'project';
+      return type === 'graphic_scheme';
     }
     return false;
   },
@@ -122,7 +119,7 @@ const Explorer = {
     if (!this.emptyHint) {
       this.emptyHint = document.createElement('p');
       this.emptyHint.className = 'props-empty tree-filter-empty';
-      this.emptyHint.textContent = 'Нет выбранных узлов. Смените фильтр в шапке обозревателя или отметьте папку либо схему.';
+      this.emptyHint.textContent = 'Нет выбранных схем. Откройте фильтр в шапке обозревателя и отметьте схемы.';
     }
     if (show) {
       if (!this.emptyHint.isConnected) this.container.appendChild(this.emptyHint);

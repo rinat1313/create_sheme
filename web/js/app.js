@@ -3410,6 +3410,7 @@ const App = {
     if (!wrap || !btn || !panel) return;
     this.treeFilter = { mode: 'all', node_xml_ids: [] };
     this.treeFilterOpen = false;
+    if (panel.parentElement !== document.body) document.body.appendChild(panel);
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.setTreeFilterOpen(!this.treeFilterOpen);
@@ -3418,14 +3419,36 @@ const App = {
     panel.querySelectorAll('input[name="treeFilterMode"]').forEach((input) => {
       input.addEventListener('change', () => {
         if (!input.checked) return;
-        this.treeFilter.mode = input.value;
+        this.treeFilter.mode = input.value === 'projects' ? 'schemes' : input.value;
         this.applyTreeFilter();
         this.saveTreeFilter();
       });
     });
-    document.addEventListener('click', () => {
-      if (this.treeFilterOpen) this.setTreeFilterOpen(false);
+    document.addEventListener('click', (e) => {
+      if (!this.treeFilterOpen) return;
+      const explorer = document.getElementById('explorer');
+      if (explorer && explorer.contains(e.target)) return;
+      if (panel.contains(e.target)) return;
+      this.setTreeFilterOpen(false);
     });
+    window.addEventListener('resize', () => this.positionTreeFilterPanel());
+  },
+
+  positionTreeFilterPanel() {
+    const panel = document.getElementById('treeFilterPanel');
+    const explorer = document.getElementById('explorer');
+    const btn = document.getElementById('btnToggleTreeFilter');
+    if (!panel || panel.hidden || !explorer || !btn) return;
+    const er = explorer.getBoundingClientRect();
+    const br = btn.getBoundingClientRect();
+    const gap = 4;
+    let left = er.right + gap;
+    const width = panel.offsetWidth || 240;
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8);
+    }
+    panel.style.left = `${left}px`;
+    panel.style.top = `${br.top}px`;
   },
 
   setTreeFilterOpen(open) {
@@ -3439,6 +3462,7 @@ const App = {
     }
     if (panel) panel.hidden = !this.treeFilterOpen;
     this.applyTreeFilter();
+    if (this.treeFilterOpen) this.positionTreeFilterPanel();
   },
 
   syncTreeFilterRadios() {
@@ -3464,8 +3488,9 @@ const App = {
     if (!this.solutionId) return;
     try {
       const filter = await API.getTreeFilter(this.solutionId);
+      const mode = filter.mode === 'projects' ? 'schemes' : (filter.mode || 'all');
       this.treeFilter = {
-        mode: filter.mode || 'all',
+        mode,
         node_xml_ids: Array.isArray(filter.node_xml_ids) ? filter.node_xml_ids : [],
       };
     } catch (_) {
@@ -5142,7 +5167,7 @@ const App = {
         <h4>Обозреватель и поиск</h4>
         <ul class="help-list">
           <li>Дерево слева показывает проекты и схемы загруженного решения. Клик по схеме открывает её на холсте.</li>
-          <li>Кнопка фильтра в заголовке обозревателя (рядом с поиском) задаёт видимость дерева: все схемы, выбранные схемы или выбранные Projects и папки. Отметка узла включает всё вложенное. Пока меню открыто, дерево видно целиком, чтобы ставить отметки; после закрытия остаются выбранные узлы. Настройка сохраняется для текущего пользователя и этого решения. Пустой выбор даёт пустое дерево. Рабочие пространства в режимах «выбранные» скрыты. Дубликаты, проверки и уже открытая схема фильтр не сужает.</li>
+          <li>Кнопка фильтра в заголовке обозревателя (рядом с поиском) открывает меню справа от обозревателя, поверх холста, и не закрывает список схем. В меню два режима: все схемы и выбранные схемы. Чекбоксы только у схем и только пока меню открыто. Клик по дереву меню не закрывает; закрытие — повтор кнопки фильтра, клик по холсту или инспектору. Пока меню открыто, дерево видно целиком, чтобы ставить отметки; после закрытия остаются выбранные схемы и путь к ним. Настройка сохраняется для текущего пользователя и этого решения. Пустой выбор даёт пустое дерево. Рабочие пространства в режиме «выбранные схемы» скрыты. Дубликаты, проверки и уже открытая схема фильтр не сужает.</li>
           <li>Кнопка <strong>⌕</strong> в заголовке обозревателя открывает или скрывает панель поиска. Состояние панели запоминается.</li>
           <li>В поиске можно искать по имени, Tag, Id и типу объекта. Id в таблице — технологический Id, как во вкладке «Основные» (если пусто — «—»). Введите запрос (не короче 2 символов; короткий запрос ищет только по Id графического или технологического объекта) — таблица покажет тип, название, Id, project и схему без повторов. При включённом фильтре дерева в выдаче только объекты видимых схем и проектов.</li>
           <li>Клик по строке открывает нужную схему и выделяет объект; если схема уже открыта, она не перезагружается. Если объект не виден в кадре — схема сдвигается к нему. На две секунды вокруг объекта появляются четыре стрелки (сверху, снизу и по бокам); повторный клик по строке показывает их снова. Клик по объекту на самой схеме стрелок не запускает.</li>
@@ -5274,6 +5299,7 @@ const App = {
           const newW = Math.max(200, Math.min(window.innerWidth * 0.45, startW + dx));
           const varName = side === 'left' ? '--explorer-width' : '--properties-width';
           document.documentElement.style.setProperty(varName, newW + 'px');
+          if (side === 'left') this.positionTreeFilterPanel();
         };
         const onUp = () => {
           window.removeEventListener('mousemove', onMove);
