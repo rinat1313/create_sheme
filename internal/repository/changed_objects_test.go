@@ -76,6 +76,7 @@ func openMigratedTestStore(t *testing.T) *Store {
 		"migrations/025_tag_edit_rule_check_actions.sql",
 		"migrations/026_user_solution_tree_filters.sql",
 		"migrations/027_tree_filter_drop_projects.sql",
+		"migrations/028_user_name_display_mode.sql",
 	}
 	for _, rel := range files {
 		sqlBytes, readErr := os.ReadFile(filepath.Join(root, rel))

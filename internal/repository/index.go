@@ -50,6 +50,7 @@ type SolutionTemplateParametersRow struct {
 	Scope         string
 	OwnerTemplate string
 	Parameters    []string
+	Labels        map[string]string
 }
 
 type SolutionTemplateEntitiesRow struct {
@@ -57,6 +58,7 @@ type SolutionTemplateEntitiesRow struct {
 	ObjectTemplate  string
 	Scope           string
 	EntityTemplates []string
+	Labels          map[string]string
 }
 
 func (s *Store) WithSolutionIndexLock(ctx context.Context, solutionID uuid.UUID, fn func(context.Context, Querier) error) error {
@@ -200,12 +202,16 @@ func (s *Store) BulkUpsertTemplateParameters(ctx context.Context, q Querier, row
 		if params == nil {
 			params = []string{}
 		}
+		labels := r.Labels
+		if labels == nil {
+			labels = map[string]string{}
+		}
 		batch.Queue(`
-			INSERT INTO solution_template_parameters (solution_id, scope, owner_template, parameters)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO solution_template_parameters (solution_id, scope, owner_template, parameters, labels)
+			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (solution_id, scope, owner_template) DO UPDATE
-			SET parameters = EXCLUDED.parameters`,
-			r.SolutionID, r.Scope, r.OwnerTemplate, params)
+			SET parameters = EXCLUDED.parameters, labels = EXCLUDED.labels`,
+			r.SolutionID, r.Scope, r.OwnerTemplate, params, labels)
 	}
 	return s.execBatch(ctx, q, batch, len(rows))
 }
@@ -220,12 +226,16 @@ func (s *Store) BulkUpsertTemplateEntities(ctx context.Context, q Querier, rows 
 		if templates == nil {
 			templates = []string{}
 		}
+		labels := r.Labels
+		if labels == nil {
+			labels = map[string]string{}
+		}
 		batch.Queue(`
-			INSERT INTO solution_template_entities (solution_id, object_template, scope, entity_templates)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO solution_template_entities (solution_id, object_template, scope, entity_templates, labels)
+			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (solution_id, object_template, scope) DO UPDATE
-			SET entity_templates = EXCLUDED.entity_templates`,
-			r.SolutionID, r.ObjectTemplate, r.Scope, templates)
+			SET entity_templates = EXCLUDED.entity_templates, labels = EXCLUDED.labels`,
+			r.SolutionID, r.ObjectTemplate, r.Scope, templates, labels)
 	}
 	return s.execBatch(ctx, q, batch, len(rows))
 }
@@ -249,41 +259,59 @@ func (s *Store) execBatch(ctx context.Context, q Querier, batch *pgx.Batch, n in
 }
 
 func (s *Store) GetTemplateParameters(ctx context.Context, solutionID uuid.UUID, scope, ownerTemplate string) ([]string, error) {
+	params, _, err := s.GetTemplateParametersLabeled(ctx, solutionID, scope, ownerTemplate)
+	return params, err
+}
+
+func (s *Store) GetTemplateParametersLabeled(ctx context.Context, solutionID uuid.UUID, scope, ownerTemplate string) ([]string, map[string]string, error) {
 	var params []string
+	labels := map[string]string{}
 	err := s.pool.QueryRow(ctx, `
-		SELECT parameters
+		SELECT parameters, COALESCE(labels, '{}'::jsonb)
 		FROM solution_template_parameters
 		WHERE solution_id=$1 AND scope=$2 AND owner_template=$3`,
-		solutionID, scope, ownerTemplate).Scan(&params)
+		solutionID, scope, ownerTemplate).Scan(&params, &labels)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return []string{}, nil
+		return []string{}, map[string]string{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if params == nil {
-		return []string{}, nil
+		params = []string{}
 	}
-	return params, nil
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	return params, labels, nil
 }
 
 func (s *Store) GetTemplateEntities(ctx context.Context, solutionID uuid.UUID, objectTemplate, scope string) ([]string, error) {
+	templates, _, err := s.GetTemplateEntitiesLabeled(ctx, solutionID, objectTemplate, scope)
+	return templates, err
+}
+
+func (s *Store) GetTemplateEntitiesLabeled(ctx context.Context, solutionID uuid.UUID, objectTemplate, scope string) ([]string, map[string]string, error) {
 	var templates []string
+	labels := map[string]string{}
 	err := s.pool.QueryRow(ctx, `
-		SELECT entity_templates
+		SELECT entity_templates, COALESCE(labels, '{}'::jsonb)
 		FROM solution_template_entities
 		WHERE solution_id=$1 AND object_template=$2 AND scope=$3`,
-		solutionID, objectTemplate, scope).Scan(&templates)
+		solutionID, objectTemplate, scope).Scan(&templates, &labels)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return []string{}, nil
+		return []string{}, map[string]string{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if templates == nil {
-		return []string{}, nil
+		templates = []string{}
 	}
-	return templates, nil
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	return templates, labels, nil
 }
 
 func (s *Store) GetSolutionIndexVersion(ctx context.Context, q Querier, solutionID uuid.UUID) (int, error) {

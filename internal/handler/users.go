@@ -74,7 +74,47 @@ func (a *API) handleMe(w http.ResponseWriter, r *http.Request) {
 		a.getMySettings(w, r)
 		return
 	}
+	if path == "/name-display-mode" {
+		a.handleNameDisplayMode(w, r)
+		return
+	}
 	http.NotFound(w, r)
+}
+
+func (a *API) handleNameDisplayMode(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		slog.Info("handleNameDisplayMode done", "method", r.Method, "duration_ms", time.Since(start).Milliseconds())
+	}()
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		mode, err := a.svc.GetNameDisplayMode(r.Context(), userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, map[string]string{"mode": mode})
+	case http.MethodPut:
+		var body struct {
+			Mode string `json:"mode"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		mode, err := a.svc.SetNameDisplayMode(r.Context(), userID, body.Mode)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, map[string]string{"mode": mode})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func (a *API) listMySolutions(w http.ResponseWriter, r *http.Request) {

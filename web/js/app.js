@@ -444,6 +444,7 @@ const App = {
     this.resetAppState();
     this.applyUserContext(id, selected ? (selected.display_name || selected.login) : '');
     await Renderer.loadDisplaySettings();
+    await this.loadNameDisplayMode();
     await Renderer.loadComplianceRules();
     await this.loadSolutionList();
   },
@@ -457,6 +458,7 @@ const App = {
       await this.openUserGate();
       this.resetAppState();
       await Renderer.loadDisplaySettings();
+      await this.loadNameDisplayMode();
       await Renderer.loadComplianceRules();
       await this.loadSolutionList();
     } catch (_) {}
@@ -525,6 +527,7 @@ const App = {
     try {
       await this.initUser();
       await Renderer.loadDisplaySettings();
+      await this.loadNameDisplayMode();
       await Renderer.loadComplianceRules();
 
       Explorer.init(
@@ -1918,6 +1921,26 @@ const App = {
     globalToggle.appendChild(document.createTextNode(' Показывать подписи на схеме'));
     body.appendChild(globalToggle);
 
+    this._nameDisplayDraft = NameDisplay.normalize(NameDisplay.mode);
+    const nameModeRow = document.createElement('div');
+    nameModeRow.className = 'display-settings__name-mode-row';
+    const nameModeLabel = document.createElement('span');
+    nameModeLabel.className = 'props-field__label';
+    nameModeLabel.textContent = 'Имена свойств';
+    const nameModeBtn = document.createElement('button');
+    nameModeBtn.type = 'button';
+    nameModeBtn.id = 'displayNameModeBtn';
+    nameModeBtn.className = 'btn btn--ghost display-settings__name-mode-btn';
+    nameModeBtn.textContent = NameDisplay.modeLabel(this._nameDisplayDraft);
+    nameModeBtn.title = 'Клик меняет режим: пользовательское → технологическое → оба';
+    nameModeBtn.addEventListener('click', () => {
+      this._nameDisplayDraft = NameDisplay.cycle(this._nameDisplayDraft);
+      nameModeBtn.textContent = NameDisplay.modeLabel(this._nameDisplayDraft);
+    });
+    nameModeRow.appendChild(nameModeLabel);
+    nameModeRow.appendChild(nameModeBtn);
+    body.appendChild(nameModeRow);
+
     for (const template of [...templateNames].sort()) {
       const s = settingsMap[template] || { template, renderer: 'symbol', visible_fields: '[]', style: '{}' };
       const block = DisplaySettingsForm.buildTypeSettingsForm(template, s, {
@@ -1967,8 +1990,39 @@ const App = {
     this.applyTransform();
   },
 
+  async loadNameDisplayMode() {
+    try {
+      const data = await API.getNameDisplayMode();
+      NameDisplay.mode = NameDisplay.normalize(data.mode);
+    } catch (_) {
+      NameDisplay.mode = 'user';
+    }
+    if (Inspector.currentObject) Inspector.render(Inspector.currentObject);
+  },
+
+  applyNameDisplayMode(mode) {
+    NameDisplay.mode = NameDisplay.normalize(mode);
+    this.invalidateComplianceParamsCache();
+    if (Inspector.currentObject) Inspector.render(Inspector.currentObject);
+  },
+
+  formatNamedCaption(name, scope) {
+    const value = String(name || '');
+    if (!value) return '';
+    const OBJECT_SCALARS = new Set(['Tag', 'Name', 'Description', 'Id', 'ExternalCode']);
+    if (scope === 'object' || OBJECT_SCALARS.has(value)) return value;
+    return NameDisplay.format({ Template: value, Name: value }) || value;
+  },
+
   async saveDisplaySettings() {
     Renderer.labelsEnabled = document.getElementById('displayLabelsGlobal')?.checked ?? false;
+    const draftMode = NameDisplay.normalize(this._nameDisplayDraft || NameDisplay.mode);
+    try {
+      const saved = await API.setNameDisplayMode(draftMode);
+      this.applyNameDisplayMode(saved.mode || draftMode);
+    } catch (_) {
+      this.applyNameDisplayMode(draftMode);
+    }
     const blocks = document.querySelectorAll('#displaySettingsBody .display-settings__type-block');
     const existing = await API.getDisplaySettings();
     for (const block of blocks) {
@@ -2394,17 +2448,19 @@ const App = {
         return;
       }
       paramSel.innerHTML = '';
+      const OBJECT_SCALARS = new Set(['Tag', 'Name', 'Description', 'Id', 'ExternalCode']);
       for (const item of items) {
         const opt = document.createElement('option');
-        opt.value = item;
-        opt.textContent = item;
-        if (item === current) opt.selected = true;
+        const value = NameDisplay.itemValue(item);
+        opt.value = value;
+        opt.textContent = OBJECT_SCALARS.has(value) ? value : (NameDisplay.formatItem(item) || value);
+        if (value === current) opt.selected = true;
         paramSel.appendChild(opt);
       }
       paramSel.disabled = false;
       paramSel.title = '';
       applyParamState(null);
-      if (!paramSel.value) paramSel.value = items[0];
+      if (!paramSel.value) paramSel.value = NameDisplay.itemValue(items[0]);
       syncSourceOptions();
     };
 
@@ -3053,7 +3109,7 @@ const App = {
       case 'object_name': return row.object_name || '';
       case 'object_type': return row.object_type || '';
       case 'scope_label': return row.scope_label || '';
-      case 'source_label': return row.source_label || '';
+      case 'source_label': return this.formatNamedCaption(row.source_label, row.scope);
       case 'scheme': return row.scheme_name || row.scheme_xml_id || '';
       default: return '';
     }
@@ -3987,7 +4043,7 @@ const App = {
       item.className = 'duplicate-panel__item';
       item.innerHTML = `
         <span class="duplicate-panel__item-tag">${this.escapeHtml(row.tag)}</span>
-        <span class="duplicate-panel__item-meta">${this.escapeHtml(row.object_name)} · ${this.escapeHtml(row.scope_label)} · ${this.escapeHtml(row.source_label)}</span>
+        <span class="duplicate-panel__item-meta">${this.escapeHtml(row.object_name)} · ${this.escapeHtml(row.scope_label)} · ${this.escapeHtml(this.formatNamedCaption(row.source_label, row.scope))}</span>
         <span class="duplicate-panel__item-meta">${this.escapeHtml(row.technology_object_id || '—')}</span>`;
       item.addEventListener('click', () => {
         const obj = this.currentScheme?.GraphicObject?.find(o => o.Id === row.object_id);
@@ -4287,15 +4343,17 @@ const App = {
         return;
       }
       paramSel.innerHTML = '';
+      const OBJECT_SCALARS = new Set(['Tag', 'Name', 'Description', 'Id', 'ExternalCode']);
       for (const item of items) {
         const opt = document.createElement('option');
-        opt.value = item;
-        opt.textContent = item;
-        if (item === current) opt.selected = true;
+        const value = NameDisplay.itemValue(item);
+        opt.value = value;
+        opt.textContent = OBJECT_SCALARS.has(value) ? value : (NameDisplay.formatItem(item) || value);
+        if (value === current) opt.selected = true;
         paramSel.appendChild(opt);
       }
       paramSel.disabled = false;
-      if (!paramSel.value) paramSel.value = items[0];
+      if (!paramSel.value) paramSel.value = NameDisplay.itemValue(items[0]);
       syncSourceOptions();
     };
     const currentForScope = (scope) => {
@@ -4991,10 +5049,15 @@ const App = {
       syncOrderList();
     };
 
-    const rebuildFieldChecks = (allFields, selectedFields) => {
+    const rebuildFieldChecks = (allFields, selectedFields, labeledItems) => {
       checks.innerHTML = '';
       knownFields = new Set(allFields);
       fieldOrder.length = 0;
+      const labelByName = {};
+      for (const item of labeledItems || []) {
+        const name = NameDisplay.itemValue(item);
+        if (name) labelByName[name] = NameDisplay.formatItem(item) || name;
+      }
       for (const f of selectedFields) {
         if (allFields.includes(f)) fieldOrder.push(f);
       }
@@ -5003,6 +5066,7 @@ const App = {
           if (allFields.includes(f)) fieldOrder.push(f);
         }
       }
+      const OBJECT_SCALARS = new Set(['Tag', 'Name', 'Description', 'Id', 'ExternalCode', 'Template']);
       for (const opt of allFields) {
         const label = document.createElement('label');
         const cb = document.createElement('input');
@@ -5011,7 +5075,8 @@ const App = {
         cb.checked = fieldOrder.includes(opt);
         cb.addEventListener('change', () => toggleField(opt, cb.checked));
         label.appendChild(cb);
-        label.appendChild(document.createTextNode(opt));
+        const caption = OBJECT_SCALARS.has(opt) ? opt : (labelByName[opt] || this.formatNamedCaption(opt));
+        label.appendChild(document.createTextNode(caption));
         checks.appendChild(label);
       }
       syncOrderList();
@@ -5019,9 +5084,12 @@ const App = {
 
     const loadFieldsForTemplate = async (template) => {
       let allFields = baseFields;
+      let labeledItems = [];
       if (template && this.solutionId) {
         try {
-          allFields = await API.getTemplateParameters(this.solutionId, template, this.sessionId);
+          labeledItems = await API.getTemplateParameters(this.solutionId, template, this.sessionId);
+          const names = NameDisplay.names(labeledItems);
+          if (names.length) allFields = names;
         } catch (_) {}
       }
       if (!allFields.includes('Template')) {
@@ -5034,7 +5102,7 @@ const App = {
           if (vf.length > 0) selectedFields = vf;
         } catch (_) {}
       }
-      rebuildFieldChecks(allFields, selectedFields);
+      rebuildFieldChecks(allFields, selectedFields, labeledItems);
     };
 
     templateSel.addEventListener('change', async () => {
@@ -5217,7 +5285,7 @@ const App = {
         <h4>Панель инструментов</h4>
         <ul class="help-list">
           <li><strong>👤 Выбрать…</strong> — выбор или создание пользователя (слева вверху). Настройки и решения привязаны к пользователю. Кнопка всегда доступна; без пользователя текст «Выбрать…», после выбора — укороченный логин.</li>
-          <li><strong>⚙ Отображение</strong> — для каждого типа объекта: режим знака (детальный символ, буква, линия для труб), показ на схеме, смещение от угла, поля подписи (Name, Tag, Id и др.), для труб — толщина линии. Общий переключатель «Показывать подписи на схеме».</li>
+          <li><strong>⚙ Отображение</strong> — для каждого типа объекта: режим знака (детальный символ, буква, линия для труб), показ на схеме, смещение от угла, поля подписи (Name, Tag, Id и др.), для труб — толщина линии. Общий переключатель «Показывать подписи на схеме». Кнопка <strong>Имена свойств</strong> показывает текущий режим имён характеристик, команд и защит: «Пользовательское», «Технологическое» или «Оба». Клик циклически меняет режим; действует после <strong>Применить</strong> и запоминается для пользователя. Основные поля объекта не меняются. Если русского текста нет, видно только технологическое имя; в режиме «Оба» при наличии перевода — «Status — Статус».</li>
           <li><strong>⚠ Проверки</strong> — порядок полей: Тип объекта → Область → Параметр → Атрибут параметра → Условие текста → Текст → Пустое поле → Индикация → Цвет → Период. Область задаёт список Параметра (Основные, Характеристики, Команды, Защиты); при нарушении объект подсвечивается на схеме. Условие текста: «Должен / Не должен содержать» — по вхождению; «Строгое соответствие» — значение должно быть равно тексту; «Не должен совпадать строго» — нарушение, если значение ровно равно тексту (подсветка объекта). Списки параметров берутся из каталога решения и на повторных открытиях загружаются быстро. Если список не загрузился, нажмите <strong>⟳ Повторить</strong> рядом с полем «Параметр». Надпись «Нет вариантов» означает, что для выбранного типа объекта и области список пуст.</li>
           <li><strong>🏷 Редактирование TAG</strong> — правила сверху вниз. После типа объекта выбираете, что проверять (как в «Проверках»: основные характеристики, характеристики, команды, защиты и конкретное поле). Условие: содержит / начинается / заканчивается / «Пустое поле» — тогда «Текст» скрыт. Галки «Непустой Tag в блоках»: объект в выборке, только если во всех отмеченных блоках есть непустой Tag. Затем одно или несколько действий: какое поле менять, «Очистить» (без «Заменить на») или «Заменить» («Заменить на» и способ: найденное / вся строка / первое / все / последнее совпадение). Экспорт и импорт — читаемый JSON правил. «Применить» держит оверлей до конца. Изменения — «● Несохранено» и «Выгрузить объекты → Только изменённые».</li>
           <li><strong>Выгрузить объекты</strong> — таблица CSV/JSON по выбранным полям и порядку колонок. Галка <strong>Только изменённые объекты</strong> (счётчик в скобках) — объекты с правками <em>содержания</em>: имя, описание, Tag, характеристики, команды, защиты и прочие поля инспектора; также после «Редактирование TAG» и «Оригинальный объект». <em>Не</em> входят: перетаскивание, X/Y, угол, размер, видимость объекта в решении и всё из <strong>⚙ Отображение</strong> (подписи, поля, стиль). Колонка <strong>Template</strong>, фильтр «Тип объекта» и фильтр Tag (Все / только непустые / только пустые) сочетаются с «только изменённые». <strong>Обнуление данных по изменённым объектам</strong> — только сброс учёта в счётчике и фильтре, без отмены правок; <strong>Сохранить</strong> счётчик не обнуляет.</li>
@@ -5237,7 +5305,7 @@ const App = {
           <li>Подписи на схеме только из <strong>⚙ Отображение</strong>: какие поля выводить и включён ли «Показывать подписи на схеме».</li>
           <li><strong>+ / − / Fit</strong> — масштаб и обзор всей схемы.</li>
           <li><strong>🔓 Движение</strong> — отдельный режим холста: при активном режиме можно выбирать и перетаскивать трубы, мосты и перемычки; при блокировке режима — только оборудование. Не путать с блокировкой перемещения объекта в решении.</li>
-          <li>Клик по объекту открывает панель свойств справа (Основные, Характеристики, Команды, Защиты). Во вкладках можно править свойства и сохранять как обычно — в том числе у объектов, заблокированных на перемещение в решении. У таких объектов на схеме перетаскивание недоступно; во вкладке «Основные» поля X, Y и Angle только для просмотра. Во вкладке «Основные» после типа показывается Id технологического объекта из solution.xml; id графического объекта не показывается. Подписи на схеме и выгрузка по полю Id используют тот же технологический Id (если пусто — поле не заполняется / «—»). Если у выбранного объекта есть дубликаты основного Tag, справа в строке названия — <strong>Оригинальный объект</strong> (не рядом с «Проверить на дубликаты»). Кнопка сразу ставит основной Tag остальных таких объектов в «*»; Tag в Характеристиках, Командах и Защитах не меняется. Подтверждения нет. Списки дубликатов обновляются на месте. В поиске обозревателя этой кнопки нет. Правки полей живут в буфере сессии: при переключении схем они не пропадают; «Сохранить» записывает их в решение.</li>
+          <li>Клик по объекту открывает панель свойств справа (Основные, Характеристики, Команды, Защиты). Имена характеристик, команд и защит берутся из режима <strong>Имена свойств</strong> в <strong>⚙ Отображение</strong>. Во вкладках можно править свойства и сохранять как обычно — в том числе у объектов, заблокированных на перемещение в решении. У таких объектов на схеме перетаскивание недоступно; во вкладке «Основные» поля X, Y и Angle только для просмотра. Во вкладке «Основные» после типа показывается Id технологического объекта из solution.xml; id графического объекта не показывается. Подписи на схеме и выгрузка по полю Id используют тот же технологический Id (если пусто — поле не заполняется / «—»). Если у выбранного объекта есть дубликаты основного Tag, справа в строке названия — <strong>Оригинальный объект</strong> (не рядом с «Проверить на дубликаты»). Кнопка сразу ставит основной Tag остальных таких объектов в «*»; Tag в Характеристиках, Командах и Защитах не меняется. Подтверждения нет. Списки дубликатов обновляются на месте. В поиске обозревателя этой кнопки нет. Правки полей живут в буфере сессии: при переключении схем они не пропадают; «Сохранить» записывает их в решение.</li>
           <li>Строка в Поиске, в таблице Дубликатов, на вкладке «Дубликаты» инспектора или в плавающей панели дубликатов выделяет объект и на две секунды ставит четыре стрелки вокруг него. Если объекта нет в кадре, схема сначала сдвигается к нему; повторный клик по строке в списке показывает стрелки снова. Клик по объекту на схеме стрелок не запускает.</li>
           <li>Перетаскивание фона (зажать и сдвинуть) — панорамирование, выбранный объект остаётся выбранным. Короткий клик по пустому месту схемы снимает выбор. Колёсико мыши — масштаб к курсору.</li>
           <li><strong>Drop из WinCC OA</strong> — перетащите текст datapoint из WinCC OA 3.17 на объект схемы: в Tag запишется имя DP. На editable поле инспектора — значение вставится в это поле. Формат: <code>prefix:DP.rest</code> → берётся <code>DP</code> (часть после первого <code>:</code> до первой <code>.</code>). Неверный формат игнорируется.</li>

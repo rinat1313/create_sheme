@@ -259,6 +259,23 @@ const API = {
     return r.blob();
   },
 
+  async getNameDisplayMode() {
+    const r = await apiFetch('/api/v1/me/name-display-mode');
+    if (!r.ok) return { mode: 'user' };
+    const data = await r.json();
+    return data && data.mode ? data : { mode: 'user' };
+  },
+
+  async setNameDisplayMode(mode) {
+    const r = await apiFetch('/api/v1/me/name-display-mode', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    if (!r.ok) throw new Error('name display mode failed');
+    return r.json();
+  },
+
   async getDisplaySettings() {
     const r = await apiFetch('/api/v1/display-settings');
     return r.json();

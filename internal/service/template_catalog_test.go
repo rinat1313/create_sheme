@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"create_sheme/internal/domain"
+	"create_sheme/internal/repository"
 
 	"github.com/google/uuid"
 )
@@ -12,7 +13,7 @@ import (
 func catalogFixtureSolution() domain.Solution {
 	valveA := objWithTemplate("valve-a", "Valve", "V-A")
 	valveA.TechnologyObject[0].TechnologyProperty = []domain.TechnologyProperty{
-		{Name: "Pressure", Template: "Pressure"},
+		{Name: "Pressure", Template: "Pressure", Description: "Давление"},
 		{Name: "Tag", Template: "TagProp"},
 		{Template: "OnlyTemplate"},
 		{Name: "", Template: ""},
@@ -38,10 +39,11 @@ func catalogFixtureSolution() domain.Solution {
 		ControlCommands: domain.ControlCommands{
 			ControlCommand: []domain.ControlCommand{
 				{
-					Template: "ValveOpen",
-					Target:   "valve-a",
+					Template:    "ValveOpen",
+					Description: "Открыть",
+					Target:      "valve-a",
 					TechnologyProperty: []domain.TechnologyProperty{
-						{Name: "Timeout", Template: "Timeout"},
+						{Name: "Timeout", Template: "Timeout", Description: "Таймаут"},
 						{Name: "Name", Template: "NameProp"},
 					},
 				},
@@ -198,5 +200,55 @@ func TestCatalogEquivalenceAllScopes(t *testing.T) {
 func TestCatalogVersionConstant(t *testing.T) {
 	if CatalogVersion < 1 {
 		t.Fatalf("CatalogVersion must be >= 1, got %d", CatalogVersion)
+	}
+}
+
+func TestBuildTemplateParameterLabels(t *testing.T) {
+	rows := buildTemplateParameters(uuid.New(), catalogFixtureSolution())
+	var property *repository.SolutionTemplateParametersRow
+	for i := range rows {
+		if rows[i].Scope == "property" && rows[i].OwnerTemplate == "Valve" {
+			property = &rows[i]
+			break
+		}
+	}
+	if property == nil {
+		t.Fatal("property Valve row missing")
+	}
+	if property.Labels["Pressure"] != "Давление" {
+		t.Fatalf("Pressure label: got %q", property.Labels["Pressure"])
+	}
+}
+
+func TestBuildTemplateEntityLabels(t *testing.T) {
+	rows := buildTemplateEntities(uuid.New(), catalogFixtureSolution())
+	var command *repository.SolutionTemplateEntitiesRow
+	for i := range rows {
+		if rows[i].ObjectTemplate == "Valve" && rows[i].Scope == "command" {
+			command = &rows[i]
+			break
+		}
+	}
+	if command == nil {
+		t.Fatal("command Valve row missing")
+	}
+	if command.Labels["ValveOpen"] != "Открыть" {
+		t.Fatalf("ValveOpen label: got %q", command.Labels["ValveOpen"])
+	}
+}
+
+func TestToLabeledNames(t *testing.T) {
+	got := toLabeledNames([]string{"Pressure", "Flow"}, map[string]string{"Pressure": "Давление"})
+	if len(got) != 2 || got[0].Name != "Pressure" || got[0].Description != "Давление" || got[1].Description != "" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestNormalizeNameDisplayMode(t *testing.T) {
+	if NormalizeNameDisplayMode("both") != "both" {
+		t.Fatal("both")
+	}
+	if NormalizeNameDisplayMode("nope") != "user" {
+		t.Fatal("default user")
 	}
 }

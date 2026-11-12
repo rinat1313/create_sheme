@@ -165,6 +165,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	migration028, err := os.ReadFile("migrations/028_user_name_display_mode.sql")
+	if err != nil {
+		slog.Error("read migration failed", "file", "migrations/028_user_name_display_mode.sql", "err", err)
+		os.Exit(1)
+	}
+	if err := store.Migrate(ctx, string(migration028)); err != nil {
+		slog.Error("migrate failed", "file", "migrations/028_user_name_display_mode.sql", "err", err)
+		os.Exit(1)
+	}
+
 	if err := store.EnsureDefaultUser(ctx); err != nil {
 		slog.Error("ensure default user failed", "err", err)
 		os.Exit(1)

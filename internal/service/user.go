@@ -88,6 +88,46 @@ func (s *SolutionService) ListSolutionsForUser(ctx context.Context, userID uuid.
 	return s.store.ListSolutionsForUser(ctx, userID)
 }
 
+func NormalizeNameDisplayMode(mode string) string {
+	switch mode {
+	case "user", "tech", "both":
+		return mode
+	default:
+		return "user"
+	}
+}
+
+func (s *SolutionService) GetNameDisplayMode(ctx context.Context, userID uuid.UUID) (string, error) {
+	start := time.Now()
+	var err error
+	var mode string
+	defer func() {
+		slog.Info("GetNameDisplayMode done", "user_id", userID, "mode", mode, "duration_ms", time.Since(start).Milliseconds(), "err", err)
+	}()
+	slog.Debug("GetNameDisplayMode start", "user_id", userID)
+	mode, err = s.store.GetNameDisplayMode(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	mode = NormalizeNameDisplayMode(mode)
+	return mode, nil
+}
+
+func (s *SolutionService) SetNameDisplayMode(ctx context.Context, userID uuid.UUID, mode string) (string, error) {
+	start := time.Now()
+	var err error
+	defer func() {
+		slog.Info("SetNameDisplayMode done", "user_id", userID, "mode", mode, "duration_ms", time.Since(start).Milliseconds(), "err", err)
+	}()
+	slog.Debug("SetNameDisplayMode start", "user_id", userID, "mode", mode)
+	mode = NormalizeNameDisplayMode(mode)
+	err = s.store.UpsertNameDisplayMode(ctx, userID, mode)
+	if err != nil {
+		return "", err
+	}
+	return mode, nil
+}
+
 func (s *SolutionService) GetUserSettings(ctx context.Context, userID uuid.UUID) (UserSettings, error) {
 	start := time.Now()
 	defer func() {

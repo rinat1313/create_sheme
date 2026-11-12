@@ -1083,6 +1083,8 @@ body {
 .props-cmd-row__tag, .props-prot-row__tag { font-family: var(--font-mono); font-size: 11px; color: var(--state-info); }
 
 .display-settings__global-toggle { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-size: 13px; cursor: pointer; }
+.display-settings__name-mode-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.display-settings__name-mode-btn { min-width: 180px; }
 .display-settings__renderer-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .display-settings__stroke-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .display-settings__stroke-width { flex: 1; }

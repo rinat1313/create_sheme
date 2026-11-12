@@ -506,15 +506,18 @@ const Inspector = {
     const columnDefs = this.characteristicsColumnDefs();
     const layout = TableLayout.loadLayout(storageKey, columnDefs);
 
-    const rows = to.TechnologyProperty.map((p, idx) => ({
-      propId: p.Id,
-      label: p.Template || p.Name || p.Description || 'Параметр',
-      value: this.propDisplayValue(p),
-      tag: p.Tag || '',
-      _xmlIndex: idx,
-      _sortName: (p.Template || p.Name || p.Description || '').toLowerCase(),
-      _sortTag: (p.Tag || '').toLowerCase(),
-    }));
+    const rows = to.TechnologyProperty.map((p, idx) => {
+      const label = NameDisplay.format(p) || 'Параметр';
+      return {
+        propId: p.Id,
+        label,
+        value: this.propDisplayValue(p),
+        tag: p.Tag || '',
+        _xmlIndex: idx,
+        _sortName: label.toLowerCase(),
+        _sortTag: (p.Tag || '').toLowerCase(),
+      };
+    });
     this.sortRows(rows);
 
     this.body.innerHTML = '';
@@ -578,10 +581,10 @@ const Inspector = {
       const base = {
         entityId: entity.Id,
         entityType,
-        name: entity.Description || entity.Name || '—',
+        name: NameDisplay.format(entity) || '—',
         entity_tag: entity.Tag || '',
         _xmlIndex: entityIdx,
-        _sortName: (entity.Description || entity.Name || '').toLowerCase(),
+        _sortName: (NameDisplay.format(entity) || '').toLowerCase(),
         _sortTag: (entity.Tag || '').toLowerCase(),
       };
       if (props.length === 0) {
@@ -592,7 +595,7 @@ const Inspector = {
         rows.push({
           ...base,
           propId: p.Id,
-          prop_label: p.Template || p.Name || p.Description || 'Параметр',
+          prop_label: NameDisplay.format(p) || 'Параметр',
           value: this.propDisplayValue(p),
           prop_tag: p.Tag || '',
           _xmlIndex: entityIdx * 1000 + propIdx,

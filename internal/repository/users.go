@@ -2,10 +2,12 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 var DefaultUserID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -159,5 +161,46 @@ func (s *Store) SeedUserSettingsFromDefault(ctx context.Context, newUserID uuid.
 		       empty_allowed, check_properties, check_commands, check_protections,
 		       sort_order
 		FROM tag_edit_rules WHERE user_id = $2`, newUserID, DefaultUserID)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO user_name_display_mode (user_id, mode)
+		SELECT $1, COALESCE((SELECT mode FROM user_name_display_mode WHERE user_id = $2), 'user')
+		ON CONFLICT (user_id) DO NOTHING`, newUserID, DefaultUserID)
+	return err
+}
+
+func (s *Store) GetNameDisplayMode(ctx context.Context, userID uuid.UUID) (string, error) {
+	start := time.Now()
+	var mode string
+	var err error
+	defer func() {
+		slog.Info("GetNameDisplayMode done", "user_id", userID, "mode", mode, "duration_ms", time.Since(start).Milliseconds(), "err", err)
+	}()
+	err = s.pool.QueryRow(ctx, `SELECT mode FROM user_name_display_mode WHERE user_id=$1`, userID).Scan(&mode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "user", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if mode == "" {
+		return "user", nil
+	}
+	return mode, nil
+}
+
+func (s *Store) UpsertNameDisplayMode(ctx context.Context, userID uuid.UUID, mode string) error {
+	start := time.Now()
+	var err error
+	defer func() {
+		slog.Info("UpsertNameDisplayMode done", "user_id", userID, "mode", mode, "duration_ms", time.Since(start).Milliseconds(), "err", err)
+	}()
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO user_name_display_mode (user_id, mode, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (user_id) DO UPDATE SET mode = EXCLUDED.mode, updated_at = NOW()`,
+		userID, mode)
 	return err
 }

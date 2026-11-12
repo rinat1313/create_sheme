@@ -150,7 +150,9 @@ const DisplaySettingsForm = {
       cb.className = 'display-settings__cb';
       if (onChange) cb.addEventListener('change', () => onChange(block));
       labelEl.appendChild(cb);
-      labelEl.appendChild(document.createTextNode(opt));
+      const OBJECT_SCALARS = new Set(['Name', 'Description', 'Tag', 'Id', 'ExternalCode']);
+      const caption = OBJECT_SCALARS.has(opt) ? opt : (NameDisplay.format({ Template: opt, Name: opt }) || opt);
+      labelEl.appendChild(document.createTextNode(caption));
       checks.appendChild(labelEl);
     }
     block.appendChild(checks);

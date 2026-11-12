@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const CatalogVersion = 3
+const CatalogVersion = 4
 
 var baseComplianceParameters = []string{"Description", "ExternalCode", "Id", "Name", "Tag"}
 
@@ -217,6 +217,7 @@ func buildTemplateParameters(solutionID uuid.UUID, sol domain.Solution) []reposi
 	slog.Debug("buildTemplateParameters start", "solution_id", solutionID)
 
 	objectProps := map[string]map[string]bool{}
+	objectLabels := map[string]map[string]string{}
 	for _, project := range sol.Projects.Project {
 		for _, scheme := range project.GraphicScheme {
 			for _, obj := range scheme.GraphicObject {
@@ -235,12 +236,14 @@ func buildTemplateParameters(solutionID uuid.UUID, sol domain.Solution) []reposi
 						continue
 					}
 					seen[key] = true
+					rememberParamLabel(objectLabels, tmpl, key, p.Description)
 				}
 			}
 		}
 	}
 
 	commandProps := map[string]map[string]bool{}
+	commandLabels := map[string]map[string]string{}
 	for _, cmd := range sol.ControlCommands.ControlCommand {
 		if cmd.Template == "" {
 			continue
@@ -256,10 +259,12 @@ func buildTemplateParameters(solutionID uuid.UUID, sol domain.Solution) []reposi
 				continue
 			}
 			seen[key] = true
+			rememberParamLabel(commandLabels, cmd.Template, key, p.Description)
 		}
 	}
 
 	protectionProps := map[string]map[string]bool{}
+	protectionLabels := map[string]map[string]string{}
 	for _, auto := range sol.Automations.Automation {
 		if auto.Template == "" {
 			continue
@@ -275,11 +280,12 @@ func buildTemplateParameters(solutionID uuid.UUID, sol domain.Solution) []reposi
 				continue
 			}
 			seen[key] = true
+			rememberParamLabel(protectionLabels, auto.Template, key, p.Description)
 		}
 	}
 
 	var rows []repository.SolutionTemplateParametersRow
-	appendSorted := func(scope, owner string, keys map[string]bool, withBase bool) {
+	appendSorted := func(scope, owner string, keys map[string]bool, labels map[string]string, withBase bool) {
 		extra := make([]string, 0, len(keys))
 		for k := range keys {
 			extra = append(extra, k)
@@ -294,20 +300,35 @@ func buildTemplateParameters(solutionID uuid.UUID, sol domain.Solution) []reposi
 			Scope:         scope,
 			OwnerTemplate: owner,
 			Parameters:    params,
+			Labels:        labels,
 		})
 	}
 
 	for tmpl, keys := range objectProps {
-		appendSorted("property", tmpl, keys, false)
-		appendSorted("object", tmpl, keys, true)
+		appendSorted("property", tmpl, keys, objectLabels[tmpl], false)
+		appendSorted("object", tmpl, keys, objectLabels[tmpl], true)
 	}
 	for tmpl, keys := range commandProps {
-		appendSorted("command", tmpl, keys, true)
+		appendSorted("command", tmpl, keys, commandLabels[tmpl], true)
 	}
 	for tmpl, keys := range protectionProps {
-		appendSorted("protection", tmpl, keys, true)
+		appendSorted("protection", tmpl, keys, protectionLabels[tmpl], true)
 	}
 	return rows
+}
+
+func rememberParamLabel(bucket map[string]map[string]string, owner, key, description string) {
+	if owner == "" || key == "" || description == "" {
+		return
+	}
+	labels := bucket[owner]
+	if labels == nil {
+		labels = map[string]string{}
+		bucket[owner] = labels
+	}
+	if labels[key] == "" {
+		labels[key] = description
+	}
 }
 
 func buildTemplateEntities(solutionID uuid.UUID, sol domain.Solution) []repository.SolutionTemplateEntitiesRow {
@@ -338,6 +359,7 @@ func buildTemplateEntities(solutionID uuid.UUID, sol domain.Solution) []reposito
 	}
 
 	commandByObject := map[string]map[string]struct{}{}
+	commandEntityLabels := map[string]map[string]string{}
 	for _, cmd := range sol.ControlCommands.ControlCommand {
 		if cmd.Template == "" || cmd.Target == "" {
 			continue
@@ -349,10 +371,12 @@ func buildTemplateEntities(solutionID uuid.UUID, sol domain.Solution) []reposito
 				commandByObject[objectTemplate] = set
 			}
 			set[cmd.Template] = struct{}{}
+			rememberParamLabel(commandEntityLabels, objectTemplate, cmd.Template, cmd.Description)
 		}
 	}
 
 	protectionByObject := map[string]map[string]struct{}{}
+	protectionEntityLabels := map[string]map[string]string{}
 	for _, auto := range sol.Automations.Automation {
 		if auto.Template == "" || auto.Target == "" {
 			continue
@@ -364,11 +388,12 @@ func buildTemplateEntities(solutionID uuid.UUID, sol domain.Solution) []reposito
 				protectionByObject[objectTemplate] = set
 			}
 			set[auto.Template] = struct{}{}
+			rememberParamLabel(protectionEntityLabels, objectTemplate, auto.Template, auto.Description)
 		}
 	}
 
 	var rows []repository.SolutionTemplateEntitiesRow
-	appendRows := func(scope string, byObject map[string]map[string]struct{}) {
+	appendRows := func(scope string, byObject map[string]map[string]struct{}, labelsByObject map[string]map[string]string) {
 		for objectTemplate, set := range byObject {
 			list := make([]string, 0, len(set))
 			for tmpl := range set {
@@ -380,11 +405,12 @@ func buildTemplateEntities(solutionID uuid.UUID, sol domain.Solution) []reposito
 				ObjectTemplate:  objectTemplate,
 				Scope:           scope,
 				EntityTemplates: list,
+				Labels:          labelsByObject[objectTemplate],
 			})
 		}
 	}
-	appendRows("command", commandByObject)
-	appendRows("protection", protectionByObject)
+	appendRows("command", commandByObject, commandEntityLabels)
+	appendRows("protection", protectionByObject, protectionEntityLabels)
 	return rows
 }
 

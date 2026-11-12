@@ -224,7 +224,7 @@ func (s *SolutionService) loadSolutionWithChanges(ctx context.Context, solutionI
 	return sol, nil
 }
 
-func (s *SolutionService) ListComplianceTargets(ctx context.Context, solutionID uuid.UUID, objectTemplate, scope string, sessionID *uuid.UUID) ([]string, error) {
+func (s *SolutionService) ListComplianceTargets(ctx context.Context, solutionID uuid.UUID, objectTemplate, scope string, sessionID *uuid.UUID) ([]LabeledName, error) {
 	start := time.Now()
 	var err error
 	defer func() {
@@ -243,14 +243,15 @@ func (s *SolutionService) ListComplianceTargets(ctx context.Context, solutionID 
 		return nil, err
 	}
 	var targets []string
-	targets, err = s.store.GetTemplateEntities(ctx, solutionID, objectTemplate, scope)
+	var labels map[string]string
+	targets, labels, err = s.store.GetTemplateEntitiesLabeled(ctx, solutionID, objectTemplate, scope)
 	if err != nil {
 		return nil, err
 	}
 	if targets == nil {
 		targets = []string{}
 	}
-	return targets, nil
+	return toLabeledNames(targets, labels), nil
 }
 
 func listComplianceTargetsFromSolution(sol domain.Solution, objectTemplate, scope string) ([]string, error) {
@@ -287,7 +288,7 @@ func listComplianceTargetsFromSolution(sol domain.Solution, objectTemplate, scop
 	return result, nil
 }
 
-func (s *SolutionService) ListComplianceTargetParameters(ctx context.Context, solutionID uuid.UUID, scope, entityTemplate string, sessionID *uuid.UUID) ([]string, error) {
+func (s *SolutionService) ListComplianceTargetParameters(ctx context.Context, solutionID uuid.UUID, scope, entityTemplate string, sessionID *uuid.UUID) ([]LabeledName, error) {
 	start := time.Now()
 	var err error
 	defer func() {
@@ -310,14 +311,15 @@ func (s *SolutionService) ListComplianceTargetParameters(ctx context.Context, so
 		return nil, err
 	}
 	var params []string
-	params, err = s.store.GetTemplateParameters(ctx, solutionID, scope, entityTemplate)
+	var labels map[string]string
+	params, labels, err = s.store.GetTemplateParametersLabeled(ctx, solutionID, scope, entityTemplate)
 	if err != nil {
 		return nil, err
 	}
 	if params == nil {
 		params = []string{}
 	}
-	return params, nil
+	return toLabeledNames(params, labels), nil
 }
 
 func listComplianceTargetParametersFromSolution(sol domain.Solution, scope, entityTemplate string) ([]string, error) {
@@ -363,7 +365,7 @@ func listComplianceTargetParametersFromSolution(sol domain.Solution, scope, enti
 	return append(append([]string{}, baseComplianceParameters...), extra...), nil
 }
 
-func (s *SolutionService) ListTemplateParameters(ctx context.Context, solutionID uuid.UUID, template string, sessionID *uuid.UUID) ([]string, error) {
+func (s *SolutionService) ListTemplateParameters(ctx context.Context, solutionID uuid.UUID, template string, sessionID *uuid.UUID) ([]LabeledName, error) {
 	start := time.Now()
 	var err error
 	defer func() {
@@ -376,17 +378,18 @@ func (s *SolutionService) ListTemplateParameters(ctx context.Context, solutionID
 		return nil, err
 	}
 	var params []string
-	params, err = s.store.GetTemplateParameters(ctx, solutionID, "object", template)
+	var labels map[string]string
+	params, labels, err = s.store.GetTemplateParametersLabeled(ctx, solutionID, "object", template)
 	if err != nil {
 		return nil, err
 	}
 	if params == nil {
 		params = []string{}
 	}
-	return params, nil
+	return toLabeledNames(params, labels), nil
 }
 
-func (s *SolutionService) ListTemplateCharacteristics(ctx context.Context, solutionID uuid.UUID, template string, sessionID *uuid.UUID) ([]string, error) {
+func (s *SolutionService) ListTemplateCharacteristics(ctx context.Context, solutionID uuid.UUID, template string, sessionID *uuid.UUID) ([]LabeledName, error) {
 	start := time.Now()
 	var err error
 	defer func() {
@@ -399,14 +402,15 @@ func (s *SolutionService) ListTemplateCharacteristics(ctx context.Context, solut
 		return nil, err
 	}
 	var params []string
-	params, err = s.store.GetTemplateParameters(ctx, solutionID, "property", template)
+	var labels map[string]string
+	params, labels, err = s.store.GetTemplateParametersLabeled(ctx, solutionID, "property", template)
 	if err != nil {
 		return nil, err
 	}
 	if params == nil {
 		params = []string{}
 	}
-	return params, nil
+	return toLabeledNames(params, labels), nil
 }
 
 func listTemplateParametersFromSolution(sol domain.Solution, template string) []string {
