@@ -10,6 +10,7 @@ const Explorer = {
   selectedIds: new Set(),
   picking: false,
   parentOf: {},
+  childrenOf: {},
   typeOf: {},
   branchOf: {},
   emptyHint: null,
@@ -24,6 +25,7 @@ const Explorer = {
     this.solutionId = id;
     this.loadedProjects.clear();
     this.parentOf = {};
+    this.childrenOf = {};
     this.typeOf = {};
     this.branchOf = {};
   },
@@ -52,6 +54,56 @@ const Explorer = {
     this.parentOf[node.xml_id] = parentXmlId || '';
     this.typeOf[node.xml_id] = node.type;
     this.branchOf[node.xml_id] = branch || '';
+    if (parentXmlId) {
+      if (!this.childrenOf[parentXmlId]) this.childrenOf[parentXmlId] = [];
+      if (!this.childrenOf[parentXmlId].includes(node.xml_id)) {
+        this.childrenOf[parentXmlId].push(node.xml_id);
+      }
+    }
+  },
+
+  mountProjectsBranchChildren(childUl, projectsNode, parentXmlId, branch, depth) {
+    this.indexNode(projectsNode, parentXmlId, branch);
+    for (const child of projectsNode.children || []) {
+      childUl.appendChild(this.renderNode(child, depth + 1, projectsNode.xml_id, branch));
+    }
+  },
+
+  getDescendantSchemeIds(xmlId) {
+    const out = [];
+    const seenSchemes = new Set();
+    const stack = [xmlId];
+    const walkSeen = new Set();
+    const projectsInWalk = new Set();
+    while (stack.length) {
+      const cur = stack.pop();
+      if (walkSeen.has(cur)) continue;
+      walkSeen.add(cur);
+      const type = this.typeOf[cur];
+      if (type === 'graphic_scheme') {
+        if (!seenSchemes.has(cur)) {
+          seenSchemes.add(cur);
+          out.push(cur);
+        }
+        continue;
+      }
+      if (type === 'project') projectsInWalk.add(cur);
+      for (const kid of this.childrenOf[cur] || []) {
+        stack.push(kid);
+      }
+    }
+    const map = typeof App !== 'undefined' && App.schemeProjectMap ? App.schemeProjectMap : null;
+    if (map) {
+      for (const projectId of projectsInWalk) {
+        for (const [schemeId, pid] of Object.entries(map)) {
+          if (pid === projectId && !seenSchemes.has(schemeId)) {
+            seenSchemes.add(schemeId);
+            out.push(schemeId);
+          }
+        }
+      }
+    }
+    return out;
   },
 
   isXmlVisible(xmlId) {
@@ -78,14 +130,41 @@ const Explorer = {
     return false;
   },
 
-  isSelectable(type, branch) {
+  isSelectable(type, branch, xmlId) {
     if (this.filterMode === 'all') return false;
     if (branch === 'workspaces') return false;
     if (type === 'solution') return false;
+    if (xmlId === 'projects') return false;
+    if (branch !== 'projects') return false;
     if (this.filterMode === 'schemes') {
-      return type === 'graphic_scheme';
+      return type === 'project' || type === 'folder' || type === 'graphic_scheme';
     }
     return false;
+  },
+
+  checkboxStateForNode(xmlId, type) {
+    if (type === 'graphic_scheme') {
+      const on = this.selectedIds.has(xmlId);
+      return { checked: on, indeterminate: false };
+    }
+    const schemes = this.getDescendantSchemeIds(xmlId);
+    if (!schemes.length) {
+      if (this.selectedIds.has(xmlId)) {
+        return { checked: true, indeterminate: false };
+      }
+      return { checked: false, indeterminate: false };
+    }
+    let selectedCount = 0;
+    for (const sid of schemes) {
+      if (this.selectedIds.has(sid)) selectedCount += 1;
+    }
+    if (selectedCount === 0 && !this.selectedIds.has(xmlId)) {
+      return { checked: false, indeterminate: false };
+    }
+    if (selectedCount === schemes.length) {
+      return { checked: true, indeterminate: false };
+    }
+    return { checked: false, indeterminate: true };
   },
 
   applyVisibility() {
@@ -131,7 +210,7 @@ const Explorer = {
 
   syncCheckbox(div, xmlId, type, branch) {
     let box = div.querySelector('.tree-node__filter-check');
-    const need = this.picking && this.isSelectable(type, branch);
+    const need = this.picking && this.isSelectable(type, branch, xmlId);
     if (!need) {
       if (box) box.remove();
       return;
@@ -140,16 +219,28 @@ const Explorer = {
       box = document.createElement('input');
       box.type = 'checkbox';
       box.className = 'tree-node__filter-check';
-      box.addEventListener('click', (e) => e.stopPropagation());
+      let clickWasIndeterminate = false;
+      box.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clickWasIndeterminate = box.indeterminate;
+      });
       box.addEventListener('change', (e) => {
         e.stopPropagation();
         if (typeof App !== 'undefined' && App.onTreeFilterToggle) {
-          App.onTreeFilterToggle(xmlId, box.checked);
+          const checked = clickWasIndeterminate ? true : box.checked;
+          if (clickWasIndeterminate) {
+            box.checked = true;
+            box.indeterminate = false;
+          }
+          App.onTreeFilterToggle(xmlId, type, checked, clickWasIndeterminate);
+          clickWasIndeterminate = false;
         }
       });
       div.insertBefore(box, div.querySelector('.tree-node__icon'));
     }
-    box.checked = this.selectedIds.has(xmlId);
+    const state = this.checkboxStateForNode(xmlId, type);
+    box.checked = state.checked;
+    box.indeterminate = state.indeterminate;
   },
 
   setComplianceHints(hints) {
@@ -213,13 +304,22 @@ const Explorer = {
   render(tree) {
     this.collapsedNodes.clear();
     this.parentOf = {};
+    this.childrenOf = {};
     this.typeOf = {};
     this.branchOf = {};
     this.container.innerHTML = '';
     const ul = document.createElement('ul');
     ul.className = 'tree';
     for (const node of tree) {
-      ul.appendChild(this.renderNode(node, 0, '', ''));
+      if (node.xml_id === 'projects') {
+        const branch = this.nodeBranch(node, '');
+        this.indexNode(node, '', branch);
+        for (const child of node.children || []) {
+          ul.appendChild(this.renderNode(child, 0, node.xml_id, branch));
+        }
+      } else {
+        ul.appendChild(this.renderNode(node, 0, '', ''));
+      }
     }
     this.container.appendChild(ul);
     this.applyComplianceToTree();
@@ -355,7 +455,12 @@ const Explorer = {
       childUl.className = 'tree-node__children' + (collapsed ? ' tree-node__children--collapsed' : '');
       if (hasChildren) {
         for (const child of node.children) {
-          childUl.appendChild(this.renderNode(child, depth + 1, node.xml_id, branch));
+          if (child.xml_id === 'projects') {
+            const projectsBranch = this.nodeBranch(child, branch);
+            this.mountProjectsBranchChildren(childUl, child, node.xml_id, projectsBranch, depth);
+          } else {
+            childUl.appendChild(this.renderNode(child, depth + 1, node.xml_id, branch));
+          }
         }
       }
       li.appendChild(childUl);

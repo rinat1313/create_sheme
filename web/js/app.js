@@ -936,6 +936,7 @@ const App = {
     for (const scheme of schemes || []) {
       this.schemeProjectMap[scheme.xml_id] = projectXmlId;
     }
+    Explorer.applyVisibility();
   },
 
   findSchemeContext(schemeXmlId) {
@@ -3513,11 +3514,23 @@ const App = {
     }, 300);
   },
 
-  onTreeFilterToggle(xmlId, checked) {
+  onTreeFilterToggle(xmlId, type, checked, fromIndeterminate) {
     if (!xmlId) return;
     const ids = new Set(this.treeFilter.node_xml_ids || []);
-    if (checked) ids.add(xmlId);
-    else ids.delete(xmlId);
+    const selectAll = checked || fromIndeterminate;
+    if (type === 'graphic_scheme') {
+      if (selectAll) ids.add(xmlId);
+      else ids.delete(xmlId);
+    } else {
+      const schemes = Explorer.getDescendantSchemeIds(xmlId);
+      if (selectAll) {
+        for (const sid of schemes) ids.add(sid);
+        ids.delete(xmlId);
+      } else {
+        for (const sid of schemes) ids.delete(sid);
+        ids.delete(xmlId);
+      }
+    }
     this.treeFilter.node_xml_ids = Array.from(ids);
     this.applyTreeFilter();
     this.saveTreeFilter();
