@@ -936,6 +936,28 @@ const App = {
     for (const scheme of schemes || []) {
       this.schemeProjectMap[scheme.xml_id] = projectXmlId;
     }
+    if (this.treeFilter && this.treeFilter.mode === 'schemes') {
+      const ids = new Set(this.treeFilter.node_xml_ids || []);
+      let ancestorOn = ids.has(projectXmlId);
+      let p = Explorer.parentOf[projectXmlId] || '';
+      const seen = new Set();
+      while (p && !seen.has(p)) {
+        seen.add(p);
+        if (ids.has(p)) {
+          ancestorOn = true;
+          break;
+        }
+        p = Explorer.parentOf[p] || '';
+      }
+      if (ancestorOn) {
+        for (const scheme of schemes || []) {
+          if (scheme.xml_id) ids.add(scheme.xml_id);
+        }
+        ids.delete(projectXmlId);
+        this.treeFilter.node_xml_ids = Array.from(ids);
+        this.saveTreeFilter();
+      }
+    }
     Explorer.applyVisibility();
   },
 
@@ -3524,8 +3546,12 @@ const App = {
     } else {
       const schemes = Explorer.getDescendantSchemeIds(xmlId);
       if (selectAll) {
-        for (const sid of schemes) ids.add(sid);
-        ids.delete(xmlId);
+        if (schemes.length) {
+          for (const sid of schemes) ids.add(sid);
+          ids.delete(xmlId);
+        } else {
+          ids.add(xmlId);
+        }
       } else {
         for (const sid of schemes) ids.delete(sid);
         ids.delete(xmlId);
