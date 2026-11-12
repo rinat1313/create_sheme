@@ -353,14 +353,30 @@ const Renderer = {
     return base * this.objectSymbolScale;
   },
 
+  propertyFieldValue(p) {
+    if (!p) return '';
+    const str = (p.StringValue || '').trim();
+    if (str) return p.StringValue;
+    const enumVal = (p.EnumItemValue || '').trim();
+    if (enumVal) return p.EnumItemValue;
+    const boolVal = (p.BooleanValue || '').trim();
+    if (boolVal) return p.BooleanValue;
+    const points = (p.PointsValue || '').trim();
+    if (points) return p.PointsValue;
+    const link = (p.LinkValue || '').trim();
+    if (link) return p.LinkValue;
+    const real = p.RealValue;
+    if (real !== undefined && real !== null && real !== '' && Number(real) !== 0) return String(real);
+    const intv = p.IntegerValue;
+    if (intv !== undefined && intv !== null && intv !== '' && Number(intv) !== 0) return String(intv);
+    return '';
+  },
+
   getPropValue(to, fieldName) {
     if (!to || !to.TechnologyProperty) return '';
     for (const p of to.TechnologyProperty) {
       if (p.Name === fieldName || p.Template === fieldName) {
-        if (p.RealValue !== undefined && p.RealValue !== null && p.RealValue !== '') return String(p.RealValue);
-        if (p.StringValue) return p.StringValue;
-        if (p.IntegerValue !== undefined && p.IntegerValue !== null && p.IntegerValue !== '') return String(p.IntegerValue);
-        if (p.BooleanValue) return p.BooleanValue;
+        return this.propertyFieldValue(p);
       }
     }
     return '';
@@ -392,11 +408,7 @@ const Renderer = {
       if (!to || !to.TechnologyProperty) return '';
       for (const p of to.TechnologyProperty) {
         if (p.Name === rule.parameter || p.Template === rule.parameter) {
-          if (p.RealValue !== undefined && p.RealValue !== null && p.RealValue !== '') return String(p.RealValue);
-          if (p.StringValue) return p.StringValue;
-          if (p.IntegerValue !== undefined && p.IntegerValue !== null && p.IntegerValue !== '') return String(p.IntegerValue);
-          if (p.BooleanValue) return p.BooleanValue;
-          if (p.PointsValue) return p.PointsValue;
+          return this.propertyFieldValue(p);
         }
       }
       return '';
@@ -450,10 +462,7 @@ const Renderer = {
     const props = entity.TechnologyProperty || [];
     for (const p of props) {
       if (p.Name === rule.parameter || p.Template === rule.parameter) {
-        if (p.RealValue !== undefined && p.RealValue !== null && p.RealValue !== '') return String(p.RealValue);
-        if (p.StringValue) return p.StringValue;
-        if (p.IntegerValue !== undefined && p.IntegerValue !== null && p.IntegerValue !== '') return String(p.IntegerValue);
-        if (p.BooleanValue) return p.BooleanValue;
+        return this.propertyFieldValue(p);
       }
     }
     return '';

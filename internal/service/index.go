@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const CatalogVersion = 4
+const CatalogVersion = 5
 
 var baseComplianceParameters = []string{"Description", "ExternalCode", "Id", "Name", "Tag"}
 
@@ -306,7 +306,7 @@ func buildTemplateParameters(solutionID uuid.UUID, sol domain.Solution) []reposi
 
 	for tmpl, keys := range objectProps {
 		appendSorted("property", tmpl, keys, objectLabels[tmpl], false)
-		appendSorted("object", tmpl, keys, objectLabels[tmpl], true)
+		appendSorted("object", tmpl, map[string]bool{}, nil, true)
 	}
 	for tmpl, keys := range commandProps {
 		appendSorted("command", tmpl, keys, commandLabels[tmpl], true)

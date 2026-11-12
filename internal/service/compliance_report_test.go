@@ -191,6 +191,73 @@ func TestResolveComplianceValues_PropertyTag(t *testing.T) {
 	}
 }
 
+func TestTechnologyPropertyValue_ZeroIsEmptyNotTag(t *testing.T) {
+	p := domain.TechnologyProperty{
+		Name:         "Status",
+		IntegerValue: 0,
+		RealValue:    0,
+		Tag:          "TAG-HAS-TEXT",
+	}
+	if got := technologyPropertyValue(p); got != "" {
+		t.Fatalf("zero numeric with empty strings must be empty, not tag; got %q", got)
+	}
+	p.StringValue = "0"
+	if got := technologyPropertyValue(p); got != "0" {
+		t.Fatalf("string 0 must be value 0, got %q", got)
+	}
+	p.StringValue = ""
+	p.IntegerValue = 10
+	if got := technologyPropertyValue(p); got != "10" {
+		t.Fatalf("integer 10, got %q", got)
+	}
+}
+
+func TestEvaluateObjectComplianceAll_FieldIgnoresPropertyTag(t *testing.T) {
+	obj := testComplianceObject()
+	obj.TechnologyObject[0].Template = "Valve"
+	obj.TechnologyObject[0].TechnologyProperty[0] = domain.TechnologyProperty{
+		Name:         "Diameter",
+		StringValue:  "0",
+		Tag:          "TAG-OK",
+		IntegerValue: 0,
+	}
+	sol := domain.Solution{
+		Projects: domain.Projects{Project: []domain.Project{{
+			GraphicScheme: []domain.GraphicScheme{{
+				GraphicObject: []domain.GraphicObject{obj},
+			}},
+		}}},
+	}
+	rules := []repository.ComplianceRule{{
+		Template:       "Valve",
+		ParameterScope: "property",
+		Parameter:      "Diameter",
+		ValueSource:    "field",
+		TextCondition:  "must_not_contain",
+		ExpectedText:   "0",
+		EmptyAllowed:   true,
+		Indication:     []byte(`{"type":"solid","color":"#F85149"}`),
+	}}
+	rules[0].ID = uuid.MustParse("00000000-0000-0000-0000-0000000000aa")
+	indicators := evaluateObjectComplianceAll(sol, obj, rules)
+	if len(indicators) != 1 {
+		t.Fatalf("value 0 must violate must_not_contain 0, got %d", len(indicators))
+	}
+
+	rules[0].ValueSource = "tag"
+	indicators = evaluateObjectComplianceAll(sol, obj, rules)
+	if len(indicators) != 0 {
+		t.Fatalf("tag TAG-OK must not violate must_not_contain 0, got %d", len(indicators))
+	}
+
+	obj.TechnologyObject[0].TechnologyProperty[0].StringValue = ""
+	rules[0].ValueSource = "field"
+	indicators = evaluateObjectComplianceAll(sol, obj, rules)
+	if len(indicators) != 0 {
+		t.Fatalf("empty value with empty allowed must not violate, got %d", len(indicators))
+	}
+}
+
 func TestEvaluateObjectComplianceAll_ExactMatchRule(t *testing.T) {
 	sol := testComplianceSolutionWithCommand()
 	obj := sol.Projects.Project[0].GraphicScheme[0].GraphicObject[0]

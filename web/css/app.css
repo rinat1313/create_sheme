@@ -1125,6 +1125,15 @@ body {
   min-height: 18px;
 }
 .compliance-rule__field { width: 100%; font-size: 12px; }
+.compliance-rule__empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.compliance-rule__empty-check { margin: 0; }
 .input:disabled { opacity: 0.4; cursor: not-allowed; }
 .compliance-rule__parameter--loading:disabled,
 .compliance-rule__parameter--muted:disabled,

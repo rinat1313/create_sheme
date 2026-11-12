@@ -414,33 +414,9 @@ func (s *SolutionService) ListTemplateCharacteristics(ctx context.Context, solut
 }
 
 func listTemplateParametersFromSolution(sol domain.Solution, template string) []string {
-	seen := map[string]bool{}
-	for _, name := range baseComplianceParameters {
-		seen[name] = true
-	}
-	var extra []string
-	for _, project := range sol.Projects.Project {
-		for _, scheme := range project.GraphicScheme {
-			for _, obj := range scheme.GraphicObject {
-				if obj.TechnologyTemplate() != template {
-					continue
-				}
-				if len(obj.TechnologyObject) == 0 {
-					continue
-				}
-				for _, p := range obj.TechnologyObject[0].TechnologyProperty {
-					key := propertyKey(p)
-					if key == "" || seen[key] {
-						continue
-					}
-					seen[key] = true
-					extra = append(extra, key)
-				}
-			}
-		}
-	}
-	sort.Strings(extra)
-	return append(append([]string{}, baseComplianceParameters...), extra...)
+	_ = sol
+	_ = template
+	return append([]string{}, baseComplianceParameters...)
 }
 
 func listTemplateCharacteristicsFromSolution(sol domain.Solution, template string) []string {
@@ -774,20 +750,26 @@ func resolveObjectField(field string, obj *domain.GraphicObject, to *domain.Tech
 }
 
 func technologyPropertyValue(p domain.TechnologyProperty) string {
+	if s := strings.TrimSpace(p.StringValue); s != "" {
+		return p.StringValue
+	}
+	if s := strings.TrimSpace(p.EnumItemValue); s != "" {
+		return p.EnumItemValue
+	}
+	if s := strings.TrimSpace(p.BooleanValue); s != "" {
+		return p.BooleanValue
+	}
+	if s := strings.TrimSpace(p.PointsValue); s != "" {
+		return p.PointsValue
+	}
+	if s := strings.TrimSpace(p.LinkValue); s != "" {
+		return p.LinkValue
+	}
 	if p.RealValue != 0 {
 		return fmt.Sprintf("%v", p.RealValue)
 	}
-	if p.StringValue != "" {
-		return p.StringValue
-	}
 	if p.IntegerValue != 0 {
 		return fmt.Sprintf("%d", p.IntegerValue)
-	}
-	if p.BooleanValue != "" {
-		return p.BooleanValue
-	}
-	if p.PointsValue != "" {
-		return p.PointsValue
 	}
 	return ""
 }

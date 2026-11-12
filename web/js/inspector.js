@@ -851,11 +851,19 @@ const Inspector = {
   },
 
   propDisplayValue(p) {
-    if (p.RealValue !== undefined && p.RealValue !== null && p.RealValue !== '') return String(p.RealValue);
+    if (typeof Renderer !== 'undefined' && Renderer.propertyFieldValue) {
+      return Renderer.propertyFieldValue(p);
+    }
     if (p.StringValue) return p.StringValue;
-    if (p.IntegerValue !== undefined && p.IntegerValue !== null) return String(p.IntegerValue);
+    if (p.EnumItemValue) return p.EnumItemValue;
     if (p.BooleanValue) return p.BooleanValue;
     if (p.PointsValue) return p.PointsValue;
+    if (p.RealValue !== undefined && p.RealValue !== null && p.RealValue !== '' && Number(p.RealValue) !== 0) {
+      return String(p.RealValue);
+    }
+    if (p.IntegerValue !== undefined && p.IntegerValue !== null && Number(p.IntegerValue) !== 0) {
+      return String(p.IntegerValue);
+    }
     return '';
   },
 
