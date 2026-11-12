@@ -1086,7 +1086,7 @@ func (s *SolutionService) runTagEditJob(jobID, solutionID uuid.UUID, rules []rep
 				return
 			}
 		}
-		if mergeErr := s.store.MergeWorkingIntoChangedObjects(ctx, solutionID); mergeErr != nil {
+		if mergeErr := s.mergeSemanticWorkingIntoChangedObjects(ctx, solutionID); mergeErr != nil {
 			finished := time.Now()
 			_ = s.store.UpdateTagEditJobProgress(ctx, jobID, "failed", processed, changed, mergeErr.Error(), &finished)
 			return

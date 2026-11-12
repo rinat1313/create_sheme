@@ -117,6 +117,9 @@ func TestClearWorkingChanges_PreservesAcksAndDurable(t *testing.T) {
 	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", "obj-1", patch); err != nil {
 		t.Fatalf("UpsertWorkingChange: %v", err)
 	}
+	if err := store.UpsertSolutionChangedObject(ctx, solutionID, "graphic_object", "obj-1", "sch-1"); err != nil {
+		t.Fatalf("UpsertSolutionChangedObject: %v", err)
+	}
 	if err := store.AckExportChangedObjects(ctx, solutionID, "graphic_object", []string{"obj-acked"}); err != nil {
 		t.Fatalf("AckExportChangedObjects: %v", err)
 	}
@@ -153,7 +156,7 @@ func TestClearWorkingChanges_PreservesAcksAndDurable(t *testing.T) {
 		found[row.EntityXMLID] = true
 	}
 	if !found["obj-1"] {
-		t.Fatal("durable should keep obj-1 from UpsertWorkingChange")
+		t.Fatal("durable should keep obj-1 from explicit mark")
 	}
 	if !found["obj-durable"] {
 		t.Fatal("durable should keep explicitly upserted obj-durable")
@@ -165,14 +168,9 @@ func TestMergeWorkingIntoChangedObjects_Idempotent(t *testing.T) {
 	ctx := context.Background()
 	solutionID := createTestSolution(t, store)
 
-	_, err := store.pool.Exec(ctx, `
-		INSERT INTO working_changes (id, solution_id, scheme_xml_id, entity_type, entity_xml_id, patch)
-		VALUES ($1,$2,'sch-1','graphic_object','obj-flush','{"Id":"obj-flush"}')`,
-		uuid.New(), solutionID)
-	if err != nil {
-		t.Fatalf("insert working without upsert: %v", err)
+	if err := store.UpsertSolutionChangedObject(ctx, solutionID, "graphic_object", "obj-flush", "sch-1"); err != nil {
+		t.Fatalf("UpsertSolutionChangedObject: %v", err)
 	}
-
 	if err := store.MergeWorkingIntoChangedObjects(ctx, solutionID); err != nil {
 		t.Fatalf("MergeWorkingIntoChangedObjects: %v", err)
 	}
@@ -189,7 +187,7 @@ func TestMergeWorkingIntoChangedObjects_Idempotent(t *testing.T) {
 	}
 }
 
-func TestFlushDraftToWorking_UpsertsDurable(t *testing.T) {
+func TestFlushDraftToWorking_DoesNotAutoMarkDurable(t *testing.T) {
 	store := openMigratedTestStore(t)
 	ctx := context.Background()
 	solutionID := createTestSolution(t, store)
@@ -198,7 +196,7 @@ func TestFlushDraftToWorking_UpsertsDurable(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	patch := json.RawMessage(`{"Id":"obj-draft","Tag":"T"}`)
+	patch := json.RawMessage(`{"Id":"obj-draft","Tag":"T","AnchorPoint":[{"X":"1","Y":"2"}]}`)
 	if err := store.UpsertDraftChange(ctx, uuid.New(), sessionID, "sch-1", "graphic_object", "obj-draft", patch); err != nil {
 		t.Fatalf("UpsertDraftChange: %v", err)
 	}
@@ -210,8 +208,8 @@ func TestFlushDraftToWorking_UpsertsDurable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSolutionChangedObjects: %v", err)
 	}
-	if len(durable) != 1 || durable[0].EntityXMLID != "obj-draft" {
-		t.Fatalf("flush should upsert durable, got %+v", durable)
+	if len(durable) != 0 {
+		t.Fatalf("repo flush must not auto-mark durable, got %+v", durable)
 	}
 
 	working, err := store.ListWorkingChanges(ctx, solutionID)

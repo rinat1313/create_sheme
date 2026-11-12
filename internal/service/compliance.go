@@ -485,14 +485,27 @@ func (s *SolutionService) collectChangedObjectIDs(ctx context.Context, solutionI
 			ids[row.EntityXMLID] = true
 		}
 	}
+
+	var prune []string
 	var changes []repository.ChangeRow
 	changes, err = s.store.ListWorkingChanges(ctx, solutionID)
 	if err != nil {
 		return nil, err
 	}
 	for _, ch := range changes {
-		if ch.EntityType == "graphic_object" {
+		if ch.EntityType != "graphic_object" {
+			continue
+		}
+		var semantic bool
+		semantic, err = workingOrDraftGraphicObjectSemantic(ctx, s, solutionID, ch)
+		if err != nil {
+			return nil, err
+		}
+		if semantic {
 			ids[ch.EntityXMLID] = true
+		} else {
+			delete(ids, ch.EntityXMLID)
+			prune = append(prune, ch.EntityXMLID)
 		}
 	}
 	if sessionID != nil {
@@ -502,9 +515,26 @@ func (s *SolutionService) collectChangedObjectIDs(ctx context.Context, solutionI
 			return nil, err
 		}
 		for _, ch := range drafts {
-			if ch.EntityType == "graphic_object" {
-				ids[ch.EntityXMLID] = true
+			if ch.EntityType != "graphic_object" {
+				continue
 			}
+			var semantic bool
+			semantic, err = workingOrDraftGraphicObjectSemantic(ctx, s, solutionID, ch)
+			if err != nil {
+				return nil, err
+			}
+			if semantic {
+				ids[ch.EntityXMLID] = true
+			} else {
+				delete(ids, ch.EntityXMLID)
+				prune = append(prune, ch.EntityXMLID)
+			}
+		}
+	}
+	if len(prune) > 0 {
+		prune = uniqueStrings(prune)
+		if err = s.store.DeleteSolutionChangedObjects(ctx, solutionID, "graphic_object", prune); err != nil {
+			return nil, err
 		}
 	}
 
@@ -515,6 +545,22 @@ func (s *SolutionService) collectChangedObjectIDs(ctx context.Context, solutionI
 	}
 	subtractAckedObjectIDs(ids, acks)
 	return ids, nil
+}
+
+func uniqueStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	for _, s := range in {
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
 }
 
 func subtractAckedObjectIDs(ids map[string]bool, acks []repository.ExportChangeAckRow) {
@@ -768,38 +814,10 @@ func (s *SolutionService) AckChangedObjects(ctx context.Context, solutionID uuid
 	}()
 	slog.Debug("AckChangedObjects start", "solution_id", solutionID)
 
-	rawIDs := map[string]bool{}
-	var durable []repository.SolutionChangedObjectRow
-	durable, err = s.store.ListSolutionChangedObjects(ctx, solutionID)
+	var rawIDs map[string]bool
+	rawIDs, err = s.collectChangedObjectIDs(ctx, solutionID, sessionID)
 	if err != nil {
 		return 0, err
-	}
-	for _, row := range durable {
-		if row.EntityType == "graphic_object" {
-			rawIDs[row.EntityXMLID] = true
-		}
-	}
-	var changes []repository.ChangeRow
-	changes, err = s.store.ListWorkingChanges(ctx, solutionID)
-	if err != nil {
-		return 0, err
-	}
-	for _, ch := range changes {
-		if ch.EntityType == "graphic_object" {
-			rawIDs[ch.EntityXMLID] = true
-		}
-	}
-	if sessionID != nil {
-		var drafts []repository.ChangeRow
-		drafts, err = s.store.ListDraftChanges(ctx, *sessionID)
-		if err != nil {
-			return 0, err
-		}
-		for _, ch := range drafts {
-			if ch.EntityType == "graphic_object" {
-				rawIDs[ch.EntityXMLID] = true
-			}
-		}
 	}
 
 	entityXMLIDs := make([]string, 0, len(rawIDs))

@@ -106,6 +106,57 @@ func seedTwoSchemeSolution(t *testing.T, store *repository.Store) (uuid.UUID, do
 	return solutionID, objA, objB
 }
 
+func TestFlushLayoutDraftToWorking_SkipsDurableMark(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, objA, _ := seedTwoSchemeSolution(t, store)
+	objA.AnchorPoint = []domain.AnchorPoint{{X: "0", Y: "0"}}
+	sessionID, err := svc.CreateSession(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := svc.OpenScheme(ctx, sessionID, "sch-a"); err != nil {
+		t.Fatalf("OpenScheme A: %v", err)
+	}
+	moved := objA
+	moved.AnchorPoint = []domain.AnchorPoint{{X: "40", Y: "40"}}
+	patch, _ := json.Marshal(moved)
+	if err := svc.PatchObject(ctx, sessionID, "sch-a", "graphic_object", objA.Id, patch); err != nil {
+		t.Fatalf("PatchObject: %v", err)
+	}
+	if err := svc.OpenScheme(ctx, sessionID, "sch-b"); err != nil {
+		t.Fatalf("OpenScheme B flush: %v", err)
+	}
+	durable, err := store.ListSolutionChangedObjects(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("ListSolutionChangedObjects: %v", err)
+	}
+	if len(durable) != 0 {
+		t.Fatalf("layout flush must not mark durable, got %+v", durable)
+	}
+	working, err := store.ListWorkingChanges(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("ListWorkingChanges: %v", err)
+	}
+	found := false
+	for _, ch := range working {
+		if ch.EntityXMLID == objA.Id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("layout change should remain in working")
+	}
+	count, err := svc.CountChangedObjects(ctx, solutionID, &sessionID)
+	if err != nil {
+		t.Fatalf("CountChangedObjects: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("layout working count=%d want 0", count)
+	}
+}
+
 func TestSavePatchOpenPreservesSchemeWorking(t *testing.T) {
 	svc, store := openChangedObjectsTestEnv(t)
 	ctx := context.Background()

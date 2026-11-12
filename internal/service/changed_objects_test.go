@@ -156,6 +156,20 @@ func seedGraphicSolution(t *testing.T, store *repository.Store, objID, tag strin
 	return solutionID, obj
 }
 
+func applySemanticWorkingChange(t *testing.T, svc *SolutionService, store *repository.Store, ctx context.Context, solutionID uuid.UUID, schemeXMLID string, obj domain.GraphicObject) {
+	t.Helper()
+	patch, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("marshal patch: %v", err)
+	}
+	if err := store.UpsertWorkingChange(ctx, solutionID, schemeXMLID, "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("UpsertWorkingChange: %v", err)
+	}
+	if err := svc.applyGraphicObjectChangedMarking(ctx, solutionID, schemeXMLID, obj.Id, patch); err != nil {
+		t.Fatalf("applyGraphicObjectChangedMarking: %v", err)
+	}
+}
+
 func TestSave_PreservesChangedObjectsCount(t *testing.T) {
 	svc, store := openChangedObjectsTestEnv(t)
 	ctx := context.Background()
@@ -166,13 +180,7 @@ func TestSave_PreservesChangedObjectsCount(t *testing.T) {
 	if len(patched.TechnologyObject) > 0 {
 		patched.TechnologyObject[0].Tag = "TAG-SAVE-EDIT"
 	}
-	patch, err := json.Marshal(patched)
-	if err != nil {
-		t.Fatalf("marshal patch: %v", err)
-	}
-	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
-		t.Fatalf("UpsertWorkingChange: %v", err)
-	}
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", patched)
 
 	before, err := svc.CountChangedObjects(ctx, solutionID, nil)
 	if err != nil {
@@ -213,10 +221,7 @@ func TestExportChangedOnly_AfterSaveNonEmpty(t *testing.T) {
 	if len(patched.TechnologyObject) > 0 {
 		patched.TechnologyObject[0].Tag = "TAG-EXPORT-EDIT"
 	}
-	patch, _ := json.Marshal(patched)
-	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
-		t.Fatalf("UpsertWorkingChange: %v", err)
-	}
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", patched)
 	if err := svc.Save(ctx, solutionID); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -328,10 +333,12 @@ func TestAckChangedObjects_ClearsCountAndDurable(t *testing.T) {
 	ctx := context.Background()
 	solutionID, obj := seedGraphicSolution(t, store, "obj-ack", "TAG-ACK")
 
-	patch, _ := json.Marshal(obj)
-	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
-		t.Fatalf("UpsertWorkingChange: %v", err)
+	patchedAck := obj
+	patchedAck.Tag = "TAG-ACK"
+	if len(patchedAck.TechnologyObject) > 0 {
+		patchedAck.TechnologyObject[0].Tag = "TAG-ACK"
 	}
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", patchedAck)
 	if err := svc.Save(ctx, solutionID); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -366,10 +373,12 @@ func TestReEditAfterAck_ReturnsToCount(t *testing.T) {
 	ctx := context.Background()
 	solutionID, obj := seedGraphicSolution(t, store, "obj-reedit", "TAG-RE")
 
-	patch, _ := json.Marshal(obj)
-	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
-		t.Fatalf("UpsertWorkingChange: %v", err)
+	first := obj
+	first.Tag = "TAG-RE-1"
+	if len(first.TechnologyObject) > 0 {
+		first.TechnologyObject[0].Tag = "TAG-RE-1"
 	}
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", first)
 	if err := svc.Save(ctx, solutionID); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -382,10 +391,7 @@ func TestReEditAfterAck_ReturnsToCount(t *testing.T) {
 	if len(reedit.TechnologyObject) > 0 {
 		reedit.TechnologyObject[0].Tag = "TAG-RE-2"
 	}
-	patch2, _ := json.Marshal(reedit)
-	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch2); err != nil {
-		t.Fatalf("UpsertWorkingChange re-edit: %v", err)
-	}
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", reedit)
 
 	count, err := svc.CountChangedObjects(ctx, solutionID, nil)
 	if err != nil {
@@ -393,5 +399,183 @@ func TestReEditAfterAck_ReturnsToCount(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("re-edit after ack count=%d want 1", count)
+	}
+}
+
+func TestSemanticMatrix_LayoutOnlyDraftNotCounted(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, obj := seedGraphicSolution(t, store, "obj-layout-draft", "TAG-L")
+	obj.AnchorPoint = []domain.AnchorPoint{{X: "0", Y: "0"}}
+	sessionID, err := svc.CreateSession(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	moved := obj
+	moved.AnchorPoint = []domain.AnchorPoint{{X: "100", Y: "50"}}
+	patch, _ := json.Marshal(moved)
+	if err := svc.PatchObject(ctx, sessionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("PatchObject: %v", err)
+	}
+	count, err := svc.CountChangedObjects(ctx, solutionID, &sessionID)
+	if err != nil {
+		t.Fatalf("CountChangedObjects: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("layout-only draft count=%d want 0", count)
+	}
+}
+
+func TestSemanticMatrix_LayoutOnlyWorkingPrunesDurable(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, obj := seedGraphicSolution(t, store, "obj-prune", "TAG-P")
+	obj.AnchorPoint = []domain.AnchorPoint{{X: "0", Y: "0"}}
+	semantic := obj
+	semantic.Tag = "TAG-P-EDIT"
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", semantic)
+	if err := svc.Save(ctx, solutionID); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	layout := obj
+	layout.Tag = "TAG-P-EDIT"
+	if len(layout.TechnologyObject) > 0 {
+		layout.TechnologyObject[0].Tag = "TAG-P-EDIT"
+	}
+	layout.AnchorPoint = []domain.AnchorPoint{{X: "200", Y: "0"}}
+	patch, _ := json.Marshal(layout)
+	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("UpsertWorkingChange: %v", err)
+	}
+	count, err := svc.CountChangedObjects(ctx, solutionID, nil)
+	if err != nil {
+		t.Fatalf("CountChangedObjects: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("layout-only working count=%d want 0", count)
+	}
+	durable, err := store.ListSolutionChangedObjects(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("ListSolutionChangedObjects: %v", err)
+	}
+	if len(durable) != 0 {
+		t.Fatalf("durable should be pruned, got %+v", durable)
+	}
+}
+
+func TestSemanticMatrix_TagChangeCounted(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, obj := seedGraphicSolution(t, store, "obj-tag", "TAG-T")
+	sessionID, err := svc.CreateSession(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	edited := obj
+	edited.Tag = "TAG-T-NEW"
+	if len(edited.TechnologyObject) > 0 {
+		edited.TechnologyObject[0].Tag = "TAG-T-NEW"
+	}
+	patch, _ := json.Marshal(edited)
+	if err := svc.PatchObject(ctx, sessionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("PatchObject: %v", err)
+	}
+	count, err := svc.CountChangedObjects(ctx, solutionID, &sessionID)
+	if err != nil {
+		t.Fatalf("CountChangedObjects: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("tag change count=%d want 1", count)
+	}
+}
+
+func TestSemanticMatrix_LayoutAndTagCounted(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, obj := seedGraphicSolution(t, store, "obj-mix", "TAG-M")
+	obj.AnchorPoint = []domain.AnchorPoint{{X: "1", Y: "1"}}
+	sessionID, err := svc.CreateSession(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	mixed := obj
+	mixed.AnchorPoint = []domain.AnchorPoint{{X: "99", Y: "99"}}
+	mixed.Tag = "TAG-M-NEW"
+	if len(mixed.TechnologyObject) > 0 {
+		mixed.TechnologyObject[0].Tag = "TAG-M-NEW"
+	}
+	patch, _ := json.Marshal(mixed)
+	if err := svc.PatchObject(ctx, sessionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("PatchObject: %v", err)
+	}
+	count, err := svc.CountChangedObjects(ctx, solutionID, &sessionID)
+	if err != nil {
+		t.Fatalf("CountChangedObjects: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("layout+tag count=%d want 1", count)
+	}
+}
+
+func TestSemanticMatrix_LayoutSaveSkipsDurable(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, obj := seedGraphicSolution(t, store, "obj-save-layout", "TAG-SL")
+	obj.AnchorPoint = []domain.AnchorPoint{{X: "0", Y: "0"}}
+	sessionID, err := svc.CreateSession(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := svc.OpenScheme(ctx, sessionID, "sch-1"); err != nil {
+		t.Fatalf("OpenScheme: %v", err)
+	}
+	moved := obj
+	moved.AnchorPoint = []domain.AnchorPoint{{X: "50", Y: "50"}}
+	patch, _ := json.Marshal(moved)
+	if err := svc.PatchObject(ctx, sessionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("PatchObject: %v", err)
+	}
+	if err := svc.Save(ctx, solutionID); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	durable, err := store.ListSolutionChangedObjects(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("ListSolutionChangedObjects: %v", err)
+	}
+	if len(durable) != 0 {
+		t.Fatalf("layout-only Save durable=%+v want none", durable)
+	}
+}
+
+func TestSemanticMatrix_LayoutShiftKeepsExportAck(t *testing.T) {
+	svc, store := openChangedObjectsTestEnv(t)
+	ctx := context.Background()
+	solutionID, obj := seedGraphicSolution(t, store, "obj-ack-layout", "TAG-AK")
+	obj.AnchorPoint = []domain.AnchorPoint{{X: "0", Y: "0"}}
+	semantic := obj
+	semantic.Tag = "TAG-AK-EDIT"
+	applySemanticWorkingChange(t, svc, store, ctx, solutionID, "sch-1", semantic)
+	if err := svc.Save(ctx, solutionID); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := svc.AckChangedObjects(ctx, solutionID, nil); err != nil {
+		t.Fatalf("AckChangedObjects: %v", err)
+	}
+	layout := obj
+	layout.Tag = "TAG-AK-EDIT"
+	if len(layout.TechnologyObject) > 0 {
+		layout.TechnologyObject[0].Tag = "TAG-AK-EDIT"
+	}
+	layout.AnchorPoint = []domain.AnchorPoint{{X: "10", Y: "10"}}
+	patch, _ := json.Marshal(layout)
+	if err := store.UpsertWorkingChange(ctx, solutionID, "sch-1", "graphic_object", obj.Id, patch); err != nil {
+		t.Fatalf("UpsertWorkingChange: %v", err)
+	}
+	acks, err := store.ListExportChangeAcks(ctx, solutionID)
+	if err != nil {
+		t.Fatalf("ListExportChangeAcks: %v", err)
+	}
+	if len(acks) != 1 || acks[0].EntityXMLID != obj.Id {
+		t.Fatalf("layout shift must keep ack, got %+v", acks)
 	}
 }
