@@ -954,7 +954,7 @@ func (s *SolutionService) OpenScheme(ctx context.Context, sessionID uuid.UUID, s
 	if err != nil {
 		return err
 	}
-	if err = s.store.FlushDraftToWorking(ctx, solutionID, sessionID); err != nil {
+	if err = s.flushDraftToWorking(ctx, solutionID, sessionID); err != nil {
 		return err
 	}
 	s.BumpSolutionGen(ctx, solutionID)
@@ -983,7 +983,7 @@ func (s *SolutionService) flushAllSessionDrafts(ctx context.Context, solutionID 
 		return err
 	}
 	for _, sid := range sessionIDs {
-		if flushErr := s.store.FlushDraftToWorking(ctx, solutionID, sid); flushErr != nil {
+		if flushErr := s.flushDraftToWorking(ctx, solutionID, sid); flushErr != nil {
 			err = flushErr
 			return err
 		}
@@ -1002,7 +1002,7 @@ func (s *SolutionService) CloseScheme(ctx context.Context, sessionID uuid.UUID) 
 	if err != nil {
 		return err
 	}
-	if err = s.store.FlushDraftToWorking(ctx, solutionID, sessionID); err != nil {
+	if err = s.flushDraftToWorking(ctx, solutionID, sessionID); err != nil {
 		return err
 	}
 	if err = s.store.SetActiveScheme(ctx, sessionID, ""); err != nil {
@@ -1022,7 +1022,7 @@ func (s *SolutionService) PatchObject(ctx context.Context, sessionID uuid.UUID, 
 		err = ErrSchemeXMLIDRequired
 		return err
 	}
-	err = s.store.UpsertDraftChange(ctx, uuid.New(), sessionID, schemeXMLID, entityType, entityXMLID, patch)
+	err = s.upsertDraftChange(ctx, uuid.New(), sessionID, schemeXMLID, entityType, entityXMLID, patch)
 	if err != nil {
 		return err
 	}
@@ -1142,7 +1142,7 @@ func (s *SolutionService) Save(ctx context.Context, solutionID uuid.UUID) (err e
 	s.reportSaveProgress(solutionID, SavePhasePersistXML, 1, 1, true)
 
 	s.reportSaveProgress(solutionID, SavePhaseFinalize, 0, 1, true)
-	if err = s.store.MergeWorkingIntoChangedObjects(ctx, solutionID); err != nil {
+	if err = s.mergeSemanticWorkingIntoChangedObjects(ctx, solutionID); err != nil {
 		return err
 	}
 	if err = s.store.ClearWorkingChanges(ctx, solutionID); err != nil {

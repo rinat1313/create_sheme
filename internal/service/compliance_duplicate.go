@@ -1284,7 +1284,7 @@ func (s *SolutionService) patchGraphicObjectTag(ctx context.Context, sessionID, 
 	if err != nil {
 		return err
 	}
-	return s.store.UpsertDraftChange(ctx, uuid.New(), sessionID, req.SchemeXMLID, "graphic_object", req.ObjectID, patch)
+	return s.upsertDraftChange(ctx, uuid.New(), sessionID, req.SchemeXMLID, "graphic_object", req.ObjectID, patch)
 }
 
 func (s *SolutionService) patchCommandTag(ctx context.Context, sessionID, solutionID uuid.UUID, schemeXMLID string, req PatchDuplicateTagRequest, newTag string, sol *domain.Solution) error {
@@ -1322,7 +1322,7 @@ func (s *SolutionService) patchCommandTag(ctx context.Context, sessionID, soluti
 	if err != nil {
 		return err
 	}
-	return s.store.UpsertDraftChange(ctx, uuid.New(), sessionID, schemeXMLID, "control_command", req.EntityID, patch)
+	return s.upsertDraftChange(ctx, uuid.New(), sessionID, schemeXMLID, "control_command", req.EntityID, patch)
 }
 
 func (s *SolutionService) patchProtectionTag(ctx context.Context, sessionID, solutionID uuid.UUID, schemeXMLID string, req PatchDuplicateTagRequest, newTag string, sol *domain.Solution) error {
@@ -1360,5 +1360,5 @@ func (s *SolutionService) patchProtectionTag(ctx context.Context, sessionID, sol
 	if err != nil {
 		return err
 	}
-	return s.store.UpsertDraftChange(ctx, uuid.New(), sessionID, schemeXMLID, "automation", req.EntityID, patch)
+	return s.upsertDraftChange(ctx, uuid.New(), sessionID, schemeXMLID, "automation", req.EntityID, patch)
 }

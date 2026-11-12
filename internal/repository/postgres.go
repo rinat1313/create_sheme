@@ -473,19 +473,7 @@ func (s *Store) UpsertDraftChange(ctx context.Context, id, sessionID uuid.UUID, 
 		INSERT INTO draft_changes (id, session_id, scheme_xml_id, entity_type, entity_xml_id, patch)
 		VALUES ($1,$2,$3,$4,$5,$6)`,
 		id, sessionID, schemeXMLID, entityType, entityXMLID, patch)
-	if err != nil {
-		return err
-	}
-	if entityType == "graphic_object" {
-		solutionID, _, sessionErr := s.GetSession(ctx, sessionID)
-		if sessionErr != nil {
-			return sessionErr
-		}
-		if delErr := s.DeleteExportChangeAck(ctx, solutionID, entityType, entityXMLID); delErr != nil {
-			return delErr
-		}
-	}
-	return nil
+	return err
 }
 
 func (s *Store) ListDraftChanges(ctx context.Context, sessionID uuid.UUID) ([]ChangeRow, error) {
@@ -672,18 +660,7 @@ func (s *Store) UpsertWorkingChange(ctx context.Context, solutionID uuid.UUID, s
 		INSERT INTO working_changes (id, solution_id, scheme_xml_id, entity_type, entity_xml_id, patch)
 		VALUES ($1,$2,$3,$4,$5,$6)`,
 		uuid.New(), solutionID, schemeXMLID, entityType, entityXMLID, patch)
-	if err != nil {
-		return err
-	}
-	if entityType == "graphic_object" {
-		if err = s.UpsertSolutionChangedObject(ctx, solutionID, entityType, entityXMLID, schemeXMLID); err != nil {
-			return err
-		}
-		if err = s.DeleteExportChangeAck(ctx, solutionID, entityType, entityXMLID); err != nil {
-			return err
-		}
-	}
-	return nil
+	return err
 }
 
 type SolutionChangedObjectRow struct {
