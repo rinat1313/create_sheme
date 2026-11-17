@@ -108,6 +108,11 @@ const Explorer = {
 
   isXmlVisible(xmlId) {
     if (this.filterMode === 'all' || this.picking) return true;
+    return this.isXmlInSelectedFilter(xmlId);
+  },
+
+  isXmlInSelectedFilter(xmlId) {
+    if (this.filterMode === 'all') return true;
     if (!xmlId) return false;
     if (this.branchOf[xmlId] === 'workspaces') return false;
     if (!this.selectedIds.size) return false;
